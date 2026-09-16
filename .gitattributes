@@ -1,0 +1,3 @@
+# Keep line endings stable across machines; main.js ships as-is.
+* text=auto eol=lf
+*.png binary
