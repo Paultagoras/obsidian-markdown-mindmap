@@ -65,6 +65,44 @@ height: 400
 | `fontSize` | px | Base text size |
 | `hGap`, `vGap` | px | Spacing between columns / siblings |
 | `nodeWidth` | px | Width at which node text wraps |
+| `tiers` | shape list | Turn on tier markers (see below) |
+| `legend` | `true`, `false` | Show the key under a tiered map |
+
+### Tiers
+
+Depth styling says where a node sits in the tree. Sometimes you want to say
+what a node *is* — a settlement's size, a task's priority — independently of
+how deep it happens to be. Declare the tiers, then mark nodes with `{n}`:
+
+~~~markdown
+```mindmap
+---
+tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
+---
+- Portsmith {2}
+  - Breakwater {1}
+    - Glasspoint {2}
+      - Northreach {2}
+      - Saltwatch {1}
+  - Redwater {1}
+    - Stone River {3}
+```
+~~~
+
+`Northreach {2}` and `Saltwatch {1}` are siblings with different markers,
+which is the whole point — tier is a property of the thing, not of its
+position. Shapes available: `bar`, `circle`, `diamond`, `square`, `pill`.
+Names after `=` are optional and label the key; without them the key reads
+"Tier 1", "Tier 2" and so on. A key renders under the map unless you set
+`legend: false`.
+
+Markers sit on the side the branch arrives from, so the line meets the
+shape. Nodes you leave unmarked keep the normal depth styling, so you can
+tag only what matters.
+
+**`{n}` is inert in a map with no `tiers:` line.** A node reading
+`Match two digits \d{2}` keeps its braces, and adding tiers to one map can
+never change how another one parses.
 
 ### Interacting
 

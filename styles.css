@@ -152,6 +152,99 @@
   border-radius: 4px;
 }
 
+/* ---- tier markers ---- */
+
+/* A tiered node drops the depth-based pill/rule and leads with its shape.
+   Higher specificity than the .mm-depth-* and .mm-root-node rules above,
+   so it wins wherever a map opts into tiers. */
+.mindmap-blocks .mm-node.mm-tiered {
+  --mm-marker: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0.15em 0.3em;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+}
+
+.mindmap-blocks .mm-root-node.mm-tiered {
+  --mm-marker: 19px;
+}
+
+/* On the left wing the branch arrives from the right, so flip the order. */
+.mindmap-blocks .mm-node.mm-tiered.mm-side-left {
+  flex-direction: row-reverse;
+}
+
+.mindmap-blocks .mm-marker {
+  flex: none;
+  box-sizing: border-box;
+}
+
+.mindmap-blocks .mm-shape-bar {
+  width: calc(var(--mm-marker) * 1.6);
+  height: calc(var(--mm-marker) * 0.42);
+  border-radius: 1px;
+  background: var(--mm-branch-color);
+}
+
+.mindmap-blocks .mm-shape-circle {
+  width: var(--mm-marker);
+  height: var(--mm-marker);
+  border: 2.5px solid var(--mm-branch-color);
+  border-radius: 50%;
+}
+
+.mindmap-blocks .mm-shape-square,
+.mindmap-blocks .mm-shape-diamond {
+  width: calc(var(--mm-marker) * 0.84);
+  height: calc(var(--mm-marker) * 0.84);
+  border: 2.5px solid var(--mm-branch-color);
+}
+
+.mindmap-blocks .mm-shape-diamond {
+  transform: rotate(45deg);
+}
+
+.mindmap-blocks .mm-shape-pill {
+  width: calc(var(--mm-marker) * 1.6);
+  height: calc(var(--mm-marker) * 0.78);
+  border: 2.5px solid var(--mm-branch-color);
+  border-radius: 999px;
+}
+
+/* ---- key ---- */
+
+.mindmap-blocks .mm-legend {
+  --mm-marker: 13px;
+  --mm-branch-color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  font-size: calc(var(--mm-font-size) * 0.82);
+  color: var(--text-muted);
+}
+
+.mindmap-blocks .mm-legend-title {
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.mindmap-blocks .mm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 /* ---- links ---- */
 
 .mindmap-blocks .mm-internal-link,

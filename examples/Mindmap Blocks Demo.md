@@ -90,3 +90,32 @@ With no single root, the branches meet at a small neutral hub.
   - supporting detail
 - Third idea
 ```
+
+## Tiers
+
+Mark what a node *is*, independently of how deep it sits. Declare the tiers,
+then tag nodes with `{n}`. Northreach and Saltwatch are siblings here, with
+different markers.
+
+```mindmap
+---
+tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
+---
+- Portsmith {2}
+  - Breakwater {1}
+    - Glasspoint {2}
+      - Northreach {2}
+      - Saltwatch {1}
+      - Greyhaven {1}
+  - Redwater {1}
+    - Clearwater {1}
+      - Stone River {3}
+        - Millstone {1}
+          - Ironbank {2}
+        - Reed Crossing {1}
+          - Blackwater {2}
+            - Kingsford {3}
+```
+
+Shapes: `bar`, `circle`, `diamond`, `square`, `pill`. Unmarked nodes keep the
+normal depth styling, so you can tag only what matters.

@@ -34,6 +34,33 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // Auto-fit never shrinks a map below this, so text stays readable.
 const MIN_FIT_SCALE = 0.45;
 
+// Marker shapes a map may assign to its tiers.
+const TIER_SHAPES = ['bar', 'circle', 'diamond', 'square', 'pill'];
+
+/**
+ * Parse a `tiers:` option into [{ shape, label }].
+ *
+ *   tiers: bar, circle, diamond
+ *   tiers: bar=Hamlet, circle=Town, diamond=City
+ *
+ * Returns [] for anything unusable, which leaves tier notation switched
+ * off and `{n}` in node text treated as the literal characters it is.
+ */
+function parseTiers(spec) {
+  if (!spec) return [];
+  const out = [];
+  for (const part of String(spec).split(',')) {
+    const [rawShape, ...rest] = part.split('=');
+    const shape = rawShape.trim().toLowerCase();
+    if (!TIER_SHAPES.includes(shape)) return [];
+    out.push({
+      shape,
+      label: rest.join('=').trim() || 'Tier ' + (out.length + 1),
+    });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ *
  * Parsing
  * ------------------------------------------------------------------ */
@@ -65,6 +92,11 @@ function parseMindmap(source) {
     }
     i++; // consume the closing ---
   }
+
+  // Tier notation is live only in a map that declares its tiers, so adding
+  // it can never change how an existing map parses. A node reading
+  // "Match two digits \d{2}" keeps its braces unless this map opted in.
+  const tiers = parseTiers(options.tiers);
 
   let nextId = 0;
   const roots = [];
@@ -107,10 +139,25 @@ function parseMindmap(source) {
              stack[stack.length - 1].key >= key) stack.pop();
     }
 
+    // A trailing {n} picks a tier, but only within the declared range —
+    // "{9}" against three tiers stays literal rather than silently vanishing.
+    let tier = 0;
+    if (tiers.length) {
+      const tm = text.match(/\s*\{(\d+)\}$/);
+      if (tm) {
+        const n = parseInt(tm[1], 10);
+        if (n >= 1 && n <= tiers.length) {
+          tier = n;
+          text = text.slice(0, tm.index);
+        }
+      }
+    }
+
     const parent = stack.length ? stack[stack.length - 1].node : null;
     const node = {
       id: nextId++,
       text,
+      tier,
       depth: stack.length,
       parent,
       children: [],
@@ -127,7 +174,7 @@ function parseMindmap(source) {
     root = roots[0];
   } else {
     root = {
-      id: -1, text: null, depth: 0, parent: null, children: roots,
+      id: -1, text: null, tier: 0, depth: 0, parent: null, children: roots,
     };
     const redepth = (n, d) => {
       n.depth = d;
@@ -136,7 +183,7 @@ function parseMindmap(source) {
     roots.forEach((r) => { r.parent = root; redepth(r, 1); });
   }
 
-  return { options, root, isEmpty: roots.length === 0 };
+  return { options, tiers, root, isEmpty: roots.length === 0 };
 }
 
 /* ------------------------------------------------------------------ *
@@ -309,6 +356,7 @@ class MindMapRenderer {
     }
 
     this.options = parsed.options;
+    this.tiers = parsed.tiers;
     this.root = parsed.root;
     this.cfg = this.config();
 
@@ -332,6 +380,7 @@ class MindMapRenderer {
 
     this.assignColors();
     this.createNodeElements();
+    this.buildLegend();
     this.attachInteractions();
     this.relayout();
 
@@ -357,6 +406,24 @@ class MindMapRenderer {
       });
     });
     this.resizeObserver.observe(this.viewport);
+  }
+
+  /**
+   * A key for the tier shapes, below the map rather than floating over a
+   * corner of it: it can then never sit on top of a node, and it stays put
+   * while the map is panned. Suppressed with `legend: false`.
+   */
+  buildLegend() {
+    if (!this.tiers.length) return;
+    if (/^(false|no|off|0)$/i.test(String(this.options.legend || ''))) return;
+
+    const bar = this.el.createDiv({ cls: 'mm-legend' });
+    bar.createSpan({ cls: 'mm-legend-title', text: 'Key' });
+    for (const tier of this.tiers) {
+      const item = bar.createSpan({ cls: 'mm-legend-item' });
+      item.createSpan({ cls: 'mm-marker mm-shape-' + tier.shape });
+      item.createSpan({ cls: 'mm-legend-label', text: tier.label });
+    }
   }
 
   assignColors() {
@@ -396,6 +463,14 @@ class MindMapRenderer {
       el.style.setProperty('--mm-branch-color', node.color);
 
       if (!(node === this.root && rootIsHub)) {
+        // A tiered node shows its marker instead of the depth-based pill or
+        // rule, so tier reads as a property of the thing, not of its position.
+        if (node.tier) {
+          el.classList.add('mm-tiered');
+          const marker = document.createElement('span');
+          marker.className = 'mm-marker mm-shape-' + this.tiers[node.tier - 1].shape;
+          el.appendChild(marker);
+        }
         const label = document.createElement('div');
         label.className = 'mm-label';
         renderInline(node.text, label, (target, ev) => this.openLink(target, ev));
@@ -576,6 +651,9 @@ class MindMapRenderer {
     for (const n of this.allNodes()) {
       n.el.style.transform =
         'translate(' + (n.x + ox) + 'px,' + (n.y + oy - n.h / 2) + 'px)';
+      // Put the tier marker on the edge the branch arrives at, so the line
+      // meets the shape rather than the far end of the label.
+      n.el.classList.toggle('mm-side-left', n.side === -1);
     }
 
     this.svg.setAttribute('width', String(b.width));

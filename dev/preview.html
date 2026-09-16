@@ -65,6 +65,7 @@ H.createEl = function (tag, o) {
   return e;
 };
 H.createDiv = function (o) { return this.createEl('div', o); };
+H.createSpan = function (o) { return this.createEl('span', o); };
 
 class Plugin {}
 class PluginSettingTab {}
@@ -148,6 +149,61 @@ direction: right
 - Third idea
 `],
   ['Single node', `- Just one thought`],
+  ['Tiers: settlement map (the image)', `
+---
+tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
+---
+- Portsmith {2}
+  - Breakwater {1}
+    - Glasspoint {2}
+      - Northreach {2}
+      - Saltwatch {1}
+      - Greyhaven {1}
+  - Beachwood {1}
+    - Smithport {2}
+      - Driftwood {1}
+      - Southbay {2}
+  - Redwater {1}
+    - Clearwater {1}
+      - Stone River {3}
+        - Millstone {1}
+          - Ironbank {2}
+        - Reed Crossing {1}
+          - Blackwater {2}
+            - Kingsford {3}
+`],
+  ['REGRESSION: braces stay literal without a tiers: line', `
+- Regex notes
+  - Match two digits \d{2}
+  - Repeat {3} times
+  - Template {placeholder}
+`],
+  ['REGRESSION: links survive (they end in a paren)', `
+---
+tiers: bar, circle
+---
+- Sources {2}
+  - [Obsidian docs](https://help.obsidian.md)
+  - [[Some Note]] (parenthetical prose, not syntax)
+  - Plain leaf {1}
+`],
+  ['REGRESSION: out-of-range tier stays literal', `
+---
+tiers: bar, circle
+---
+- Root {2}
+  - Valid {1}
+  - Out of range {9}
+`],
+  ['Tiers mixed with untiered nodes', `
+---
+tiers: circle=Major, diamond=Capital
+---
+- Realm {1}
+  - Tiered town {1}
+  - Untiered note keeps depth styling
+  - Capital {2}
+`],
   ['Empty', `   `],
 ];
 
