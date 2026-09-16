@@ -79,7 +79,7 @@ Plugin-wide defaults for all of the above live in
 
 ## Install
 
-Copy `manifest.json`, `main.js` and `styles.css` into
+Obsidian needs exactly three files. Copy `manifest.json`, `main.js` and `styles.css` into
 `<vault>/.obsidian/plugins/markdown-mindmap/`, then enable the plugin under
 *Settings → Community plugins*. `install.sh` does the copy for you:
 
@@ -87,10 +87,31 @@ Copy `manifest.json`, `main.js` and `styles.css` into
 ./install.sh "/c/Repos/Notes"
 ```
 
+## Syncing across machines
+
+Obsidian loads only three files: `manifest.json`, `main.js` and
+`styles.css`. Everything else in this repo is source, docs or tooling.
+
+On a new machine:
+
+```bash
+git clone <your-repo-url> ObsidianMindMap
+cd ObsidianMindMap
+./install.sh "/path/to/vault"
+```
+
+Then enable the plugin under *Settings → Community plugins*. Plugin
+settings live in `data.json` inside the installed folder — that is per-vault
+state, not source, so it is gitignored and each machine keeps its own.
+
 ## Development
 
-There is no build. Edit `main.js` or `styles.css`, then reload Obsidian
-(Ctrl+R) to pick up the change.
+There is no build. Edit `main.js` or `styles.css`, run `./install.sh`, then
+**reload Obsidian** — Ctrl+P → *Reload app without saving*.
+
+The reload is not optional. Obsidian loads a plugin's code once, when the
+plugin is enabled or the app starts; editing the files on disk does nothing
+to a running app, and you will keep seeing the previous build.
 
 `dev/preview.html` renders the plugin in a browser against a stubbed Obsidian
 API, which is a much faster loop than reloading the app, and covers layout
