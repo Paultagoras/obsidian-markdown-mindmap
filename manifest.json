@@ -3,7 +3,8 @@
   "name": "Markdown Mind Map",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
-  "description": "Render clean mind maps from indented markdown lists inside ```mindmap code blocks.",
-  "author": "crystalmonkey",
+  "description": "Render mind maps from indented markdown lists in mindmap code blocks.",
+  "author": "Paultagoras",
+  "authorUrl": "https://github.com/Paultagoras",
   "isDesktopOnly": false
 }
