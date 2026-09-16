@@ -1,4 +1,4 @@
-# Markdown Mind Map
+# Mindmap Blocks
 
 An Obsidian plugin that renders indented markdown lists as clean mind maps,
 inline in your notes.
@@ -45,7 +45,6 @@ An optional `---` block at the top overrides the settings for that one map:
 ```mindmap
 ---
 direction: right
-collapse: 1
 height: 400
 ---
 - Knowledge Base
@@ -57,30 +56,30 @@ height: 400
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `direction` | `both`, `right` | Balanced on both sides, or a single rightward column |
-| `collapse` | number | Collapse everything below this depth (`1` shows only branches) |
 | `height` | px | Height cap for this map |
 | `color` | `true`, `false` | Per-branch colours, or the theme accent throughout |
 | `fontSize` | px | Base text size |
 | `hGap`, `vGap` | px | Spacing between columns / siblings |
 | `nodeWidth` | px | Width at which node text wraps |
-| `toolbar` | `true`, `false` | Show the hover toolbar |
 
 ### Interacting
 
-- **Click the badge** on a node to collapse or expand it. A collapsed node
-  keeps its badge visible, showing how many descendants are hidden.
-- **Drag** to pan, **Ctrl/Cmd + scroll** to zoom, **double-click** to refit.
-  Plain scrolling is left to the note.
-- **Right-click** a node for collapse, expand-subtree, focus and copy.
-- The **hover toolbar** has zoom, fit, expand-all and collapse-to-branches.
+A map always shows itself in full — there is nothing to expand and no
+controls to find, which keeps it readable on a phone as well as a desktop.
 
-Plugin-wide defaults for all of the above live in
-*Settings → Community plugins → Markdown Mind Map*.
+- **Drag** to pan, **double-click** to refit. Both work with touch.
+- **Ctrl/Cmd + scroll** to zoom on desktop. Plain scrolling is left to the
+  note, so the page never traps your wheel.
+- **Right-click** a node to copy its text (a desktop convenience only —
+  nothing is only reachable this way).
+
+Plugin-wide defaults live in
+*Settings → Community plugins → Mindmap Blocks*.
 
 ## Install
 
 Obsidian needs exactly three files. Copy `manifest.json`, `main.js` and `styles.css` into
-`<vault>/.obsidian/plugins/markdown-mindmap/`, then enable the plugin under
+`<vault>/.obsidian/plugins/mindmap-blocks/`, then enable the plugin under
 *Settings → Community plugins*. `install.sh` does the copy for you:
 
 ```bash
@@ -138,3 +137,7 @@ Then open <http://127.0.0.1:8731/dev/preview.html>.
 4. **Paint** — nodes are positioned with transforms over a single SVG layer of
    bezier edges. Pan and zoom are one transform on the container, so neither
    re-runs layout.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

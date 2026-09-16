@@ -21,8 +21,6 @@ const DEFAULT_SETTINGS = {
   vGap: 12,               // vertical gap between sibling nodes
   maxNodeWidth: 260,      // px before node text wraps
   colorfulBranches: true, // give each top-level branch its own hue
-  initialDepth: 0,        // 0 = expand everything, N = collapse below depth N
-  showToolbar: true,
 };
 
 // Hues chosen to stay legible on both light and dark Obsidian themes.
@@ -116,7 +114,6 @@ function parseMindmap(source) {
       depth: stack.length,
       parent,
       children: [],
-      collapsed: false,
     };
     if (parent) parent.children.push(node);
     else roots.push(node);
@@ -130,7 +127,7 @@ function parseMindmap(source) {
     root = roots[0];
   } else {
     root = {
-      id: -1, text: null, depth: 0, parent: null, children: roots, collapsed: false,
+      id: -1, text: null, depth: 0, parent: null, children: roots,
     };
     const redepth = (n, d) => {
       n.depth = d;
@@ -232,7 +229,7 @@ let sandbox = null;
 function getSandbox() {
   if (!sandbox || !sandbox.isConnected) {
     sandbox = document.createElement('div');
-    sandbox.className = 'markdown-mindmap mm-sandbox';
+    sandbox.className = 'mindmap-blocks mm-sandbox';
     document.body.appendChild(sandbox);
   }
   return sandbox;
@@ -284,8 +281,6 @@ class MindMapRenderer {
       vGap: num(o.vGap, s.vGap),
       maxNodeWidth: num(o.nodeWidth, s.maxNodeWidth),
       colorful: bool(o.color !== undefined ? o.color : o.colorful, s.colorfulBranches),
-      initialDepth: num(o.collapse !== undefined ? o.collapse : o.depth, s.initialDepth),
-      showToolbar: bool(o.toolbar, s.showToolbar),
     };
   }
 
@@ -302,13 +297,13 @@ class MindMapRenderer {
     }
 
     this.el.empty();
-    this.el.addClass('markdown-mindmap');
+    this.el.addClass('mindmap-blocks');
 
     let parsed;
     try {
       parsed = parseMindmap(this.source);
     } catch (err) {
-      console.error('[markdown-mindmap] parse failed', err);
+      console.error('[mindmap-blocks] parse failed', err);
       this.el.createDiv({ cls: 'mm-error', text: 'Could not parse this mind map.' });
       return;
     }
@@ -335,10 +330,7 @@ class MindMapRenderer {
     this.canvas.appendChild(this.svg);
     this.nodeLayer = this.canvas.createDiv({ cls: 'mm-nodes' });
 
-    if (this.cfg.showToolbar) this.buildToolbar();
-
     this.assignColors();
-    this.applyInitialCollapse();
     this.createNodeElements();
     this.attachInteractions();
     this.relayout();
@@ -367,23 +359,6 @@ class MindMapRenderer {
     this.resizeObserver.observe(this.viewport);
   }
 
-  buildToolbar() {
-    const bar = this.el.createDiv({ cls: 'mm-toolbar' });
-    const btn = (glyph, tip, fn) => {
-      const b = bar.createEl('button', {
-        cls: 'mm-btn',
-        attr: { 'aria-label': tip, title: tip, type: 'button' },
-      });
-      b.textContent = glyph;
-      b.addEventListener('click', (ev) => { ev.stopPropagation(); fn(); });
-    };
-    btn('−', 'Zoom out', () => this.zoomBy(1 / 1.2));
-    btn('+', 'Zoom in', () => this.zoomBy(1.2));
-    btn('⤢', 'Fit to view', () => { this.userAdjusted = false; this.fit(); });
-    btn('▼', 'Expand all', () => this.setAllCollapsed(false));
-    btn('▶', 'Collapse to branches', () => this.collapseToDepth(1));
-  }
-
   assignColors() {
     const paint = (node, color) => {
       node.color = color;
@@ -397,31 +372,11 @@ class MindMapRenderer {
     this.root.color = 'var(--interactive-accent)';
   }
 
-  applyInitialCollapse() {
-    const d = this.cfg.initialDepth;
-    if (!d || d < 1) return;
-    const walk = (n) => {
-      if (n.depth >= d && n.children.length) n.collapsed = true;
-      n.children.forEach(walk);
-    };
-    walk(this.root);
-  }
-
   /* ---- node DOM ---- */
 
   allNodes() {
     const out = [];
     const walk = (n) => { out.push(n); n.children.forEach(walk); };
-    walk(this.root);
-    return out;
-  }
-
-  visibleNodes() {
-    const out = [];
-    const walk = (n) => {
-      out.push(n);
-      if (!n.collapsed) n.children.forEach(walk);
-    };
     walk(this.root);
     return out;
   }
@@ -447,21 +402,6 @@ class MindMapRenderer {
         el.appendChild(label);
       }
 
-      if (node.children.length) {
-        const toggle = document.createElement('button');
-        toggle.className = 'mm-toggle';
-        toggle.setAttribute('type', 'button');
-        toggle.setAttribute('tabindex', '-1');
-        toggle.addEventListener('click', (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          node.collapsed = !node.collapsed;
-          this.relayout();
-        });
-        el.appendChild(toggle);
-        node.toggleEl = toggle;
-      }
-
       el.addEventListener('contextmenu', (ev) => this.showContextMenu(ev, node));
 
       node.el = el;
@@ -482,81 +422,32 @@ class MindMapRenderer {
   }
 
   showContextMenu(ev, node) {
+    if (!node.text) return;
     ev.preventDefault();
     ev.stopPropagation();
+
     const menu = new Menu();
-
-    if (node.children.length) {
-      menu.addItem((it) => it
-        .setTitle(node.collapsed ? 'Expand' : 'Collapse')
-        .setIcon(node.collapsed ? 'chevron-down' : 'chevron-right')
-        .onClick(() => { node.collapsed = !node.collapsed; this.relayout(); }));
-      menu.addItem((it) => it
-        .setTitle('Expand whole subtree')
-        .setIcon('list-tree')
-        .onClick(() => {
-          const walk = (n) => { n.collapsed = false; n.children.forEach(walk); };
-          walk(node);
-          this.relayout();
-        }));
-      menu.addItem((it) => it
-        .setTitle('Focus on this branch')
-        .setIcon('crosshair')
-        .onClick(() => this.focusOn(node)));
-    }
-    if (node.text) {
-      menu.addItem((it) => it
-        .setTitle('Copy text')
-        .setIcon('copy')
-        .onClick(async () => {
-          await navigator.clipboard.writeText(node.text);
-          new Notice('Copied node text');
-        }));
-    }
+    menu.addItem((it) => it
+      .setTitle('Copy text')
+      .setIcon('copy')
+      .onClick(async () => {
+        await navigator.clipboard.writeText(node.text);
+        new Notice('Copied node text');
+      }));
     menu.showAtMouseEvent(ev);
-  }
-
-  /** Collapse every sibling branch so one path stands alone. */
-  focusOn(node) {
-    for (const n of this.allNodes()) {
-      if (n.children.length) n.collapsed = true;
-    }
-    for (let n = node; n; n = n.parent) n.collapsed = false;
-    this.relayout();
   }
 
   /* ---- layout ---- */
 
   relayout() {
-    const visible = new Set(this.visibleNodes());
-
-    for (const node of this.allNodes()) {
-      node.el.style.display = visible.has(node) ? '' : 'none';
-      if (node.toggleEl) {
-        node.toggleEl.classList.toggle('is-collapsed', !!node.collapsed);
-        node.toggleEl.textContent = node.collapsed
-          ? String(this.countDescendants(node))
-          : '';
-        node.toggleEl.setAttribute('aria-label', node.collapsed ? 'Expand' : 'Collapse');
-        node.toggleEl.setAttribute('title', node.collapsed ? 'Expand' : 'Collapse');
-      }
-    }
-
     this.layout();
     this.paint();
     this.fitIfNeeded();
   }
 
-  countDescendants(node) {
-    let n = 0;
-    const walk = (x) => { n += x.children.length; x.children.forEach(walk); };
-    walk(node);
-    return n;
-  }
-
   /** Leaf count, so the two wings can be balanced by visual mass. */
   weight(node) {
-    if (node.collapsed || !node.children.length) return 1;
+    if (!node.children.length) return 1;
     return node.children.reduce((sum, c) => sum + this.weight(c), 0);
   }
 
@@ -607,7 +498,7 @@ class MindMapRenderer {
     const nodes = [];
     const collect = (n) => {
       nodes.push(n);
-      if (!n.collapsed) n.children.forEach(collect);
+      n.children.forEach(collect);
     };
     rootsOfSide.forEach(collect);
 
@@ -632,7 +523,7 @@ class MindMapRenderer {
 
     // Vertical packing; returns the bottom edge the subtree consumed.
     const place = (node, top) => {
-      if (node.collapsed || !node.children.length) {
+      if (!node.children.length) {
         node.y = top + node.h / 2;
         return top + node.h + cfg.vGap;
       }
@@ -657,7 +548,7 @@ class MindMapRenderer {
     let minY = Infinity;
     let maxY = -Infinity;
 
-    for (const n of this.visibleNodes()) {
+    for (const n of this.allNodes()) {
       minX = Math.min(minX, n.x);
       maxX = Math.max(maxX, n.x + n.w);
       minY = Math.min(minY, n.y - n.h / 2);
@@ -682,11 +573,9 @@ class MindMapRenderer {
     this.canvas.style.width = b.width + 'px';
     this.canvas.style.height = b.height + 'px';
 
-    for (const n of this.visibleNodes()) {
+    for (const n of this.allNodes()) {
       n.el.style.transform =
         'translate(' + (n.x + ox) + 'px,' + (n.y + oy - n.h / 2) + 'px)';
-      // The collapse badge hangs off whichever edge faces away from the root.
-      n.el.classList.toggle('mm-side-left', n.side === -1);
     }
 
     this.svg.setAttribute('width', String(b.width));
@@ -695,7 +584,6 @@ class MindMapRenderer {
     while (this.svg.firstChild) this.svg.removeChild(this.svg.firstChild);
 
     const draw = (parent) => {
-      if (parent.collapsed) return;
       for (const child of parent.children) {
         this.svg.appendChild(this.edgePath(parent, child, ox, oy));
         draw(child);
@@ -802,20 +690,6 @@ class MindMapRenderer {
     this.applyTransform();
   }
 
-  setAllCollapsed(collapsed) {
-    for (const n of this.allNodes()) {
-      if (n !== this.root && n.children.length) n.collapsed = collapsed;
-    }
-    this.relayout();
-  }
-
-  collapseToDepth(depth) {
-    for (const n of this.allNodes()) {
-      if (n.children.length) n.collapsed = n.depth >= depth;
-    }
-    this.relayout();
-  }
-
   attachInteractions() {
     let dragging = false;
     let startX = 0;
@@ -825,7 +699,7 @@ class MindMapRenderer {
 
     this.viewport.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0) return;
-      if (ev.target.closest('a, .mm-toggle, .mm-btn')) return;
+      if (ev.target.closest('a')) return;
       dragging = true;
       startX = ev.clientX;
       startY = ev.clientY;
@@ -955,7 +829,7 @@ class MindMapPlugin extends Plugin {
       try {
         child.rebuild();
       } catch (err) {
-        console.error('[markdown-mindmap] rebuild failed', err);
+        console.error('[mindmap-blocks] rebuild failed', err);
       }
     }
   }
@@ -1033,22 +907,6 @@ class MindMapSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.maxNodeWidth)
         .setDynamicTooltip()
         .onChange(async (v) => { this.plugin.settings.maxNodeWidth = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Collapse below depth')
-      .setDesc('0 shows the whole map; 1 shows only top-level branches, and so on.')
-      .addSlider((s) => s
-        .setLimits(0, 6, 1)
-        .setValue(this.plugin.settings.initialDepth)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.initialDepth = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Show toolbar')
-      .setDesc('Zoom, fit and collapse buttons in the corner of each map.')
-      .addToggle((t) => t
-        .setValue(this.plugin.settings.showToolbar)
-        .onChange(async (v) => { this.plugin.settings.showToolbar = v; await commit(); }));
   }
 }
 

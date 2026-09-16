@@ -4,7 +4,7 @@
 set -euo pipefail
 
 VAULT="${1:-/c/Repos/Notes}"
-DEST="$VAULT/.obsidian/plugins/markdown-mindmap"
+DEST="$VAULT/.obsidian/plugins/mindmap-blocks"
 
 if [ ! -d "$VAULT/.obsidian" ]; then
   echo "Not an Obsidian vault: $VAULT" >&2
@@ -14,4 +14,4 @@ fi
 mkdir -p "$DEST"
 cp manifest.json main.js styles.css "$DEST/"
 echo "Installed to $DEST"
-echo "Reload Obsidian (Ctrl+R), then enable 'Markdown Mind Map' in Community plugins."
+echo "Reload Obsidian (Ctrl+R), then enable 'Mindmap Blocks' in Community plugins."

@@ -1,6 +1,6 @@
 {
-  "id": "markdown-mindmap",
-  "name": "Markdown Mind Map",
+  "id": "mindmap-blocks",
+  "name": "Mindmap Blocks",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
   "description": "Render mind maps from indented markdown lists in mindmap code blocks.",

@@ -126,10 +126,9 @@ const CASES = [
 - Hiring timeline
 - Vendor lock-in
 `],
-  ['Rightward, collapsed to branches', `
+  ['Rightward layout', `
 ---
 direction: right
-collapse: 1
 ---
 - Knowledge Base
   - Concepts
@@ -155,7 +154,7 @@ collapse: 1
 const fakePlugin = {
   settings: {
     direction: 'both', maxHeight: 600, fontSize: 15, hGap: 46, vGap: 12,
-    maxNodeWidth: 260, colorfulBranches: true, initialDepth: 0, showToolbar: true,
+    maxNodeWidth: 260, colorfulBranches: true,
   },
   app: { workspace: { openLinkText: (t) => console.log('open:', t) } },
 };
