@@ -27,6 +27,10 @@ of it and coloured, and deeper levels sit on a coloured rule. Maps render in
 both Reading view and Live Preview. The command palette has
 **Insert mind map block** for a starter template.
 
+For a worked reference covering every feature, copy
+[`examples/Mindmap Blocks Demo.md`](examples/Mindmap%20Blocks%20Demo.md)
+into your vault and open it in Reading view.
+
 ### What the block accepts
 
 - **Bullets** (`-`, `*`, `+` or `1.`), nested by indentation.
