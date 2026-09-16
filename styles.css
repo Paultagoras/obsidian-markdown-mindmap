@@ -1,0 +1,290 @@
+/* ------------------------------------------------------------------ *
+ * Markdown Mind Map
+ * All colours come from Obsidian theme variables or the per-branch
+ * --mm-branch-color, so maps follow whatever theme is active.
+ * ------------------------------------------------------------------ */
+
+.markdown-mindmap {
+  --mm-font-size: 15px;
+  --mm-node-max-width: 260px;
+  position: relative;
+  margin: 0.75em 0;
+}
+
+/* The hidden box used to measure nodes before they are placed. */
+.markdown-mindmap.mm-sandbox {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  /* Absolutely positioned children shrink-to-fit their containing block,
+     so this needs a real width or every node wraps at minimum width. */
+  width: 4000px;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
+  contain: layout style;
+}
+
+/* ---- viewport ---- */
+
+.markdown-mindmap .mm-viewport {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-primary);
+  cursor: grab;
+  touch-action: none;
+  contain: paint;
+}
+
+.markdown-mindmap .mm-viewport.is-panning {
+  cursor: grabbing;
+}
+
+.markdown-mindmap .mm-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.markdown-mindmap .mm-edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.markdown-mindmap .mm-edge {
+  fill: none;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+
+.markdown-mindmap .mm-nodes {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- nodes ---- */
+
+.markdown-mindmap .mm-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  max-width: var(--mm-node-max-width);
+  font-size: var(--mm-font-size);
+  line-height: 1.35;
+  color: var(--text-normal);
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: left;
+  cursor: default;
+  user-select: none;
+}
+
+.markdown-mindmap .mm-label > code {
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+}
+
+/* Follow the theme's highlight colour rather than the browser default. */
+.markdown-mindmap .mm-label mark {
+  padding: 0 0.15em;
+  border-radius: 3px;
+  background: var(--text-highlight-bg, rgba(255, 208, 0, 0.35));
+  color: inherit;
+}
+
+/* Root: a solid pill in the theme accent. */
+.markdown-mindmap .mm-root-node {
+  padding: 0.5em 0.95em;
+  border-radius: 999px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-weight: 700;
+  font-size: calc(var(--mm-font-size) * 1.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* Root standing in for several top-level nodes: just a small dot. */
+.markdown-mindmap .mm-root-node.mm-hub {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+/* First level: outlined pill in the branch colour. */
+.markdown-mindmap .mm-depth-1 {
+  padding: 0.34em 0.7em;
+  border: 1.5px solid var(--mm-branch-color);
+  border-radius: 8px;
+  background: var(--background-primary);
+  font-weight: 600;
+}
+
+/* Deeper levels: text resting on its branch line. */
+.markdown-mindmap .mm-depth-2,
+.markdown-mindmap .mm-depth-3 {
+  padding: 0.15em 0.3em 0.2em;
+  border-bottom: 2px solid var(--mm-branch-color);
+  background: transparent;
+}
+
+.markdown-mindmap .mm-depth-3 {
+  border-bottom-width: 1.5px;
+  color: var(--text-muted);
+}
+
+.markdown-mindmap .mm-node:hover {
+  filter: brightness(1.08);
+}
+
+.markdown-mindmap .mm-depth-2:hover,
+.markdown-mindmap .mm-depth-3:hover {
+  background: var(--background-modifier-hover);
+  border-radius: 4px;
+}
+
+/* ---- links ---- */
+
+.markdown-mindmap .mm-internal-link,
+.markdown-mindmap .mm-external-link {
+  color: var(--link-color, var(--text-accent));
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.markdown-mindmap .mm-root-node .mm-internal-link,
+.markdown-mindmap .mm-root-node .mm-external-link {
+  color: var(--text-on-accent);
+  text-decoration: underline;
+}
+
+.markdown-mindmap .mm-internal-link:hover,
+.markdown-mindmap .mm-external-link:hover {
+  text-decoration: underline;
+}
+
+/* ---- collapse toggle ---- */
+
+.markdown-mindmap .mm-toggle {
+  position: absolute;
+  top: 50%;
+  right: -9px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1.5px solid var(--mm-branch-color);
+  border-radius: 999px;
+  background: var(--background-primary);
+  color: var(--mm-branch-color);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  box-shadow: none;
+}
+
+.markdown-mindmap .mm-node.mm-side-left .mm-toggle {
+  right: auto;
+  left: -9px;
+}
+
+/* A collapsed node keeps its badge visible: it is the only cue that
+   more of the map is hidden underneath. */
+.markdown-mindmap .mm-toggle.is-collapsed,
+.markdown-mindmap .mm-node:hover .mm-toggle,
+.markdown-mindmap .mm-toggle:focus-visible {
+  opacity: 1;
+}
+
+.markdown-mindmap .mm-toggle:not(.is-collapsed)::before {
+  content: '\2212'; /* minus */
+}
+
+.markdown-mindmap .mm-toggle:hover {
+  background: var(--mm-branch-color);
+  color: var(--background-primary);
+}
+
+/* ---- toolbar ---- */
+
+.markdown-mindmap .mm-toolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  background: var(--background-secondary);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.markdown-mindmap:hover .mm-toolbar,
+.markdown-mindmap .mm-toolbar:focus-within {
+  opacity: 0.96;
+}
+
+.markdown-mindmap .mm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.markdown-mindmap .mm-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* ---- placeholders ---- */
+
+.markdown-mindmap .mm-empty,
+.markdown-mindmap .mm-error {
+  padding: 1.1em;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.markdown-mindmap .mm-error {
+  border-color: var(--text-error);
+  color: var(--text-error);
+}
+
+/* Printing and PDF export: show the map plainly, without chrome. */
+@media print {
+  .markdown-mindmap .mm-toolbar { display: none; }
+  .markdown-mindmap .mm-viewport { border: none; overflow: visible; }
+}
+

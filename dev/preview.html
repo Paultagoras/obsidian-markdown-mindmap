@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Mind Map dev preview</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  /* A minimal stand-in for the Obsidian theme variables the plugin uses. */
+  body {
+    --background-primary: #ffffff;
+    --background-secondary: #f4f5f7;
+    --background-modifier-border: #dcdde1;
+    --background-modifier-hover: #ebedf0;
+    --text-normal: #24292f;
+    --text-muted: #6b7280;
+    --text-on-accent: #ffffff;
+    --text-accent: #2d6fd6;
+    --text-error: #c0392b;
+    --interactive-accent: #6c5ce7;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    margin: 24px;
+    max-width: 780px;
+  }
+  body.dark {
+    --background-primary: #1e1e1e;
+    --background-secondary: #262626;
+    --background-modifier-border: #3a3a3a;
+    --background-modifier-hover: #2f2f2f;
+    --text-normal: #dcddde;
+    --text-muted: #999;
+    --text-accent: #7aa2f7;
+    --interactive-accent: #7c6ef0;
+  }
+  h2 { font-size: 15px; margin: 26px 0 6px; color: var(--text-muted); font-weight: 600; }
+  #log { white-space: pre-wrap; font: 12px monospace; color: var(--text-error); }
+  button.theme { margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<button class="theme" onclick="document.body.classList.toggle('dark')">Toggle dark</button>
+<div id="log"></div>
+<div id="mounts"></div>
+
+<script>
+/* ---- Obsidian API stubs ------------------------------------------ *
+ * Everything lives inside this IIFE. Declaring `Plugin`, `Setting` &c.
+ * at top level would collide with main.js's own `const { ... }` import
+ * and abort the whole script with a redeclaration error.
+ * ------------------------------------------------------------------ */
+(function () {
+const H = HTMLElement.prototype;
+H.empty = function () { while (this.firstChild) this.removeChild(this.firstChild); };
+H.addClass = function (c) { this.classList.add(c); };
+H.removeClass = function (c) { this.classList.remove(c); };
+H.createEl = function (tag, o) {
+  o = o || {};
+  const e = document.createElement(tag);
+  if (o.cls) e.className = o.cls;
+  if (o.text) e.textContent = o.text;
+  if (o.attr) for (const k in o.attr) e.setAttribute(k, o.attr[k]);
+  this.appendChild(e);
+  return e;
+};
+H.createDiv = function (o) { return this.createEl('div', o); };
+
+class Plugin {}
+class PluginSettingTab {}
+class Setting {}
+class MarkdownRenderChild { constructor(el) { this.containerEl = el; } }
+function Notice(msg) { console.log('Notice:', msg); }
+class Menu {
+  addItem() { return this; }
+  showAtMouseEvent() {}
+}
+window.module = { exports: {} };
+window.require = function (name) {
+  if (name !== 'obsidian') throw new Error('unexpected require: ' + name);
+  return { Plugin, PluginSettingTab, Setting, Notice, Menu, MarkdownRenderChild };
+};
+}());
+</script>
+
+<script src="../main.js"></script>
+
+<script>
+/* ---- Cases ------------------------------------------------------- */
+const CASES = [
+  ['Balanced, colourful (the default)', `
+- Product Launch
+  - Marketing
+    - Social campaign
+    - Email sequence
+    - Press outreach
+  - Engineering
+    - API hardening
+    - Frontend polish
+    - Load testing
+  - Operations
+    - Support rota
+    - Runbooks
+  - Finance
+    - Pricing review
+`],
+  ['Inline markdown, links, deep nesting', `
+- **Research** notes
+  - Sources
+    - [[Reading List]]
+    - [Obsidian docs](https://help.obsidian.md)
+    - \`api/reference.md\`
+  - Themes
+    - *Emergence* in complex systems
+    - ==Key insight== worth revisiting
+    - ~~Discarded thread~~
+  - Open questions
+    - How does this scale past ten thousand notes?
+`],
+  ['Headings mixed with bullets', `
+# Quarterly Plan
+## Objectives
+- Grow retention
+- Ship the mobile client
+## Risks
+- Hiring timeline
+- Vendor lock-in
+`],
+  ['Rightward, collapsed to branches', `
+---
+direction: right
+collapse: 1
+---
+- Knowledge Base
+  - Concepts
+    - Alpha
+    - Beta
+  - Guides
+    - Setup
+    - Troubleshooting
+  - Reference
+    - API
+`],
+  ['Several top-level nodes (hub root)', `
+- First idea
+  - detail
+- Second idea
+  - detail
+- Third idea
+`],
+  ['Single node', `- Just one thought`],
+  ['Empty', `   `],
+];
+
+const fakePlugin = {
+  settings: {
+    direction: 'both', maxHeight: 600, fontSize: 15, hGap: 46, vGap: 12,
+    maxNodeWidth: 260, colorfulBranches: true, initialDepth: 0, showToolbar: true,
+  },
+  app: { workspace: { openLinkText: (t) => console.log('open:', t) } },
+};
+
+const mounts = document.getElementById('mounts');
+const log = document.getElementById('log');
+window.addEventListener('error', (e) => { log.textContent += 'ERROR: ' + e.message + '\n'; });
+
+window.RENDERERS = [];
+for (const [title, src] of CASES) {
+  const h = document.createElement('h2');
+  h.textContent = title;
+  mounts.appendChild(h);
+  const el = document.createElement('div');
+  mounts.appendChild(el);
+  try {
+    window.RENDERERS.push(new MindMapRenderer(fakePlugin, src, el, 'note.md'));
+  } catch (err) {
+    log.textContent += 'FAILED "' + title + '": ' + err.message + '\n';
+    console.error(err);
+  }
+}
+log.textContent += 'rendered ' + window.RENDERERS.length + '/' + CASES.length + ' cases\n';
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "id": "markdown-mindmap",
+  "name": "Markdown Mind Map",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Render clean mind maps from indented markdown lists inside ```mindmap code blocks.",
+  "author": "crystalmonkey",
+  "isDesktopOnly": false
+}

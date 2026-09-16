@@ -1,0 +1,12 @@
+# Obsidian writes per-vault plugin settings next to the installed plugin.
+# It is never part of the source.
+data.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Nothing here is built, but keep these out if tooling is ever added.
+node_modules/
