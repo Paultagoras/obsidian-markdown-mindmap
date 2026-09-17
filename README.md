@@ -71,6 +71,7 @@ height: 400
 | `minFont` | px | Auto-fit will not shrink text below this |
 | `edges` | `solid`, `dashed` | Route style; dashed suits a map |
 | `edgeLabels` | `true`, `false` | Allow `:: name` to name a connection |
+| `spacing` | `auto`, `manual` | Whether a compass map spreads itself to avoid overlaps |
 
 ### Tiers
 
@@ -148,21 +149,36 @@ turns, and Glasspoint above needs none to keep heading north.
 Siblings sharing a bearing are fanned apart across it, so two settlements
 both `@W` of a hub sit one above the other rather than on top of each other.
 
-A number after the bearing multiplies the gap to the parent — `@E3` places a
-node three gaps east instead of one. This is usually the cleanest way out of
-a collision: rather than bending a road onto a diagonal it does not take,
-push the place it hangs from further out and let the road run true.
+### Spacing
+
+Two subtrees can grow into the same space, and a compass map may not slide
+one of them sideways to fix it — that would tilt a road off the bearing you
+wrote, which is the one thing this layout exists to get right.
+
+So it does what you would do by hand: it sends a whole subtree **further
+along a bearing it already has**. Given an overlap it finds the fork where
+the two branches part company, then lengthens whichever road out of that
+fork does most to separate them; everything below that road travels with it
+and keeps its shape. Roads are checked as well as boxes, so one is not left
+running across a name that belongs to something else.
+
+None of that needs writing down. You only have to step in when the bearings
+genuinely contradict each other — two places pinned together with no road at
+their fork leading apart — and the map says so underneath rather than
+overlapping in silence.
+
+A number after a bearing sets a gap by hand: `@E3` places a node three gaps
+east instead of one. Spacing treats that as a **floor**, so what you write is
+never taken away, only added to when something still collides.
 
 ~~~markdown
 - Portsmith
-  - Redwater @E3      <- pushed east, making room below it
-    - Ash Hollow @S   <- so this road can run due south
+  - Redwater @E3      <- at least three gaps east, more if it needs it
+    - Ash Hollow @S
 ~~~
 
-**The trade is that you own the collisions.** Nothing reflows to avoid
-anything: two subtrees can grow into the same space, and the fix is to pick
-different bearings. That is the price of deciding where things go — the
-column layout never overlaps precisely because it never lets you choose.
+`spacing: manual` turns the automatic part off and leaves every gap exactly
+as written, for a map you would rather place yourself.
 
 **`@N` is inert in a map without `direction: compass`**, so a node reading
 `Forward to @N` keeps its text.

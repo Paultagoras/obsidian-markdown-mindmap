@@ -420,6 +420,9 @@ class MindMapRenderer {
       colorful: bool(o.color !== undefined ? o.color : o.colorful, s.colorfulBranches),
       edgeStyle: /^(dashed|solid)$/i.test(o.edges || '')
         ? o.edges.toLowerCase() : s.edgeStyle,
+      // Compass maps space themselves out unless asked not to. `manual`
+      // is for someone who wants the gaps exactly as they wrote them.
+      autoSpace: !/^(manual|off|false|no)$/i.test(String(o.spacing || '')),
     };
   }
 
@@ -492,6 +495,18 @@ class MindMapRenderer {
     }
     this.attachInteractions();
     this.relayout();
+
+    // Spacing works by sending a subtree further along a bearing it already
+    // has. Where no bearing out of a fork leads apart, nothing can be done
+    // without tilting a road, so say so rather than overlap in silence.
+    if (this.crowded) {
+      this.el.createDiv({
+        cls: 'mm-warning',
+        text: 'Some places still overlap: no bearing out of the fork they'
+          + ' share leads them apart. Change one of the bearings, or add a'
+          + ' gap multiplier such as @E3.',
+      });
+    }
 
     // Refit when the note column changes width.
     //
@@ -742,12 +757,11 @@ class MindMapRenderer {
     this.root.y = 0;
     this.root.side = 1;
 
-    const place = (node, inherited) => {
+    const place = (node) => {
       const groups = new Map();
       for (const child of node.children) {
-        const name = child.bearing || inherited || 'E';
-        if (!groups.has(name)) groups.set(name, []);
-        groups.get(name).push(child);
+        if (!groups.has(child.dirName)) groups.set(child.dirName, []);
+        groups.get(child.dirName).push(child);
       }
 
       const from = this.markerPoint(node);
@@ -768,6 +782,7 @@ class MindMapRenderer {
           cursor += sizes[i] + cfg.vGap;
 
           const along = cfg.hGap * (child.gapScale || 1)
+            + (child.autoGap || 0)
             + extent(node, u.x, u.y) / 2
             + extent(child, u.x, u.y) / 2;
 
@@ -775,15 +790,210 @@ class MindMapRenderer {
           child.x = from.x + u.x * along + px * across - child.w / 2;
           child.y = from.y + u.y * along + py * across - (child.markerDy || 0);
           child.side = u.x < -0.01 ? -1 : 1;
-          place(child, name);
+          place(child);
         }
       }
     };
 
-    place(this.root, null);
+    const nodes = this.allNodes();
+    for (const n of nodes) n.autoGap = 0;
+    place(this.root);
+
+    this.crowded = cfg.autoSpace
+      ? !this.spaceOut(nodes, () => place(this.root))
+      : false;
+  }
+
+  /**
+   * Push apart subtrees that have grown into each other.
+   *
+   * A bearing is a promise about direction, so nothing may be nudged
+   * sideways to make room — that would tilt a road off the compass, which
+   * is the one thing this layout exists to get right. The move that keeps
+   * every bearing exact is to send a whole subtree further along a bearing
+   * it already has, which is what writing `@E3` does by hand.
+   *
+   * So: take the worst overlap, walk up to the fork where the two boxes'
+   * branches part company, and lengthen whichever of the two roads leaving
+   * that fork does most to separate them. Everything below that road moves
+   * with it and keeps its shape. Repeat until the map is clear.
+   */
+  spaceOut(nodes, place) {
+    const MARGIN = 10;                      // clear air between two boxes
+    const ROAD = 5;                         // and between a road and a name
+    const PASSES = 120;
+    const CEILING = this.cfg.hGap * 60;     // never push a road off the map
+
+    const parent = new Map();
+    const index = (n, p) => {
+      parent.set(n, p);
+      n.children.forEach((c) => index(c, n));
+    };
+    index(this.root, null);
+
+    // Boxes first: two names on top of each other is worse than a road
+    // clipping one, and settling the boxes often moves the roads clear too.
+    const next = () => this.worstOverlap(nodes, MARGIN)
+      || this.worstRoadOverlap(nodes, parent, ROAD);
+
+    for (let pass = 0; pass < PASSES; pass++) {
+      const clash = next();
+      if (!clash) return true;
+      if (!this.pushApart(clash, parent, CEILING)) return false;
+      place();
+    }
+    return !next();
+  }
+
+  /**
+   * Where a road passes through a box that is not one of its own ends.
+   *
+   * Spacing the boxes apart does not by itself keep the roads clear: two
+   * subtrees can stand well clear of each other and still have a road from
+   * one run straight over a name in the other.
+   */
+  worstRoadOverlap(nodes, parent, margin) {
+    let worst = null;
+    for (const child of nodes) {
+      const from = parent.get(child);
+      if (!from) continue;
+
+      const pm = this.markerPoint(from, 0, 0);
+      const cm = this.markerPoint(child, 0, 0);
+      const A = this.boxAnchor(from, cm.x, cm.y, 0, 0);
+      const B = this.boxAnchor(child, pm.x, pm.y, 0, 0);
+      const dx = B.x - A.x;
+      const dy = B.y - A.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;         // unit normal: the way off the road
+      const ny = ux;
+
+      for (const n of nodes) {
+        if (n === child || n === from) continue;
+        const cx = n.x + n.w / 2;
+        const cy = n.y;
+
+        // Alongside this stretch of road at all, or past one of its ends?
+        const along = (cx - A.x) * ux + (cy - A.y) * uy;
+        const reach = Math.abs(ux) * n.w / 2 + Math.abs(uy) * n.h / 2;
+        if (along < -reach - margin || along > len + reach + margin) continue;
+
+        const dist = (cx - A.x) * nx + (cy - A.y) * ny;
+        const half = Math.abs(nx) * n.w / 2 + Math.abs(ny) * n.h / 2;
+        const need = half + margin - Math.abs(dist);
+        if (need <= 0) continue;
+        if (worst && need <= worst.amount) continue;
+
+        // Off the near side of the road, or the whole way across it.
+        const s = dist >= 0 ? 1 : -1;
+        worst = {
+          a: n,
+          b: child,
+          amount: need,
+          ways: [
+            { sep: { x: nx * s, y: ny * s }, amount: need },
+            { sep: { x: -nx * s, y: -ny * s }, amount: half + margin + Math.abs(dist) },
+          ],
+        };
+      }
+    }
+    return worst;
+  }
+
+  /** The worst-overlapping pair, with how far each axis is penetrated. */
+  worstOverlap(nodes, margin) {
+    let worst = null;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) + margin;
+        if (ox <= 0) continue;
+        const oy = Math.min(a.y + a.h / 2, b.y + b.h / 2)
+          - Math.max(a.y - a.h / 2, b.y - b.h / 2) + margin;
+        if (oy <= 0) continue;
+
+        const amount = Math.min(ox, oy);
+        if (worst && amount <= worst.amount) continue;
+        worst = {
+          a,
+          b,
+          amount,
+          ways: [
+            { sep: { x: a.x + a.w / 2 <= b.x + b.w / 2 ? -1 : 1, y: 0 }, amount: ox },
+            { sep: { x: 0, y: a.y <= b.y ? -1 : 1 }, amount: oy },
+          ],
+        };
+      }
+    }
+    return worst;
+  }
+
+  /**
+   * Lengthen one road out of the fork these two boxes share.
+   *
+   * There is more than one way out — either axis for two boxes, either side
+   * for a road — and more than one road that can carry the push, so every
+   * combination is costed and the cheapest real one wins. Taking the
+   * shortest way out first would be wrong: two subtrees can be a hair apart
+   * vertically and still only be separable east, because no bearing at
+   * their fork runs north.
+   */
+  pushApart(clash, parent, ceiling) {
+    const chain = (n) => {
+      const out = [];
+      for (let x = n; x; x = parent.get(x)) out.push(x);
+      return out.reverse();
+    };
+    const ca = chain(clash.a);
+    const cb = chain(clash.b);
+
+    let k = 0;
+    while (k < ca.length && k < cb.length && ca[k] === cb[k]) k++;
+
+    // Pushing a road moves its whole subtree; what separates the pair is
+    // the bearing's component along the axis they are coming apart on.
+    const dot = (u, s) => u.x * s.x + u.y * s.y;
+
+    // Every road below the fork on either chain is a candidate: each moves
+    // one of the pair and not the other. The first road out of the fork
+    // carries the whole subtree, a deeper one carries less of it — which
+    // matters when a place has looped back onto its own ancestor, where the
+    // roads between the two are the only levers there are.
+    const roads = [];
+    for (let i = k; i < ca.length; i++) roads.push({ node: ca[i], sign: 1, rank: i });
+    for (let i = k; i < cb.length; i++) roads.push({ node: cb[i], sign: -1, rank: i });
+
+    let best = null;
+    for (const way of clash.ways) {
+      for (const road of roads) {
+        const gain = road.sign * dot(COMPASS[road.node.dirName], way.sep);
+        // A road running square across the way out cannot help, however far
+        // it goes. If none of them can, the bearings themselves are what
+        // contradict each other.
+        if (gain < 0.2) continue;
+        const add = way.amount / gain;
+        // Cheapest push wins, so the map moves as little as it can; on a
+        // tie take the deeper road, which disturbs fewer places.
+        if (!best || add < best.add - 0.01
+          || (add < best.add + 0.01 && road.rank > best.rank)) {
+          best = { node: road.node, add, rank: road.rank };
+        }
+      }
+    }
+    if (!best) return false;
+
+    const total = (best.node.autoGap || 0) + best.add;
+    if (total > ceiling) return false;
+    best.node.autoGap = total;
+    return true;
   }
 
   layout() {
+    this.crowded = false;
     if (this.cfg.direction === 'compass') {
       this.layoutCompass();
       this.bbox = this.computeBBox();

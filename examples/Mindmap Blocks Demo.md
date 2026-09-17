@@ -179,12 +179,12 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
     - Smithport {2}
       - Driftwood {1} @S
       - Southbay {2} @E
-  - Redwater {1} @E3.5
+  - Redwater {1} @E
     - Ash Hollow {1} @S
       - Duston {1}
         - Copperfield {2}
           - Scrapper's Rest {1} @SE
-    - Clearwater {1} @E2
+    - Clearwater {1} @E
       - Fisher's Bend {1} @S
         - Greenbank {1}
           - Lakewood {2}
@@ -202,16 +202,17 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
               - Kingsford {3} @S
 ```
 
-A number after the bearing multiplies the gap to the parent. Redwater runs
-`@E3.5` because the road south from it — Ash Hollow, Duston, Copperfield —
-would otherwise grow into Smithport's cluster; pushing Redwater further east
-makes room for that road to run due south, as it should. Clearwater runs
-`@E2` for the same reason.
+Nothing above says how far apart anything sits. At the default spacing the
+road south from Redwater — Ash Hollow, Duston, Copperfield — would run
+straight into Smithport's cluster, so the map sends Redwater further east
+until it clears. That is the one move that leaves every bearing exactly as
+written, which is why it is the move it makes. Where two places share a
+bearing — both `@W` of the same hub, say — they are fanned apart across it
+rather than stacked on one line.
 
-That is the shape of the work: placing by hand means you own the collisions,
-and the fixes are to change a bearing or to push something further out. Where
-two places do share a bearing — both `@W` of the same hub, say — they are
-fanned apart across it rather than stacked on one line.
+A number after a bearing still sets a gap by hand — `@E3` places a node
+three gaps east — and automatic spacing treats it as a floor it will not go
+below. `spacing: manual` turns the automatic part off altogether.
 
 One thing the original drawing still says that this cannot: the routes
 named between settlements — *Ancient Tunnels* from Stone River to

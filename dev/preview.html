@@ -193,12 +193,12 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
     - Smithport {2}
       - Driftwood {1} @S
       - Southbay {2} @E
-  - Redwater {1} @E3.5
+  - Redwater {1} @E
     - Ash Hollow {1} @S
       - Duston {1}
         - Copperfield {2}
           - Scrapper's Rest {1} @SE
-    - Clearwater {1} @E2
+    - Clearwater {1} @E
       - Fisher's Bend {1} @S
         - Greenbank {1}
           - Lakewood {2}
@@ -214,6 +214,27 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
           - Old Ferry {1}
             - Blackwater {2}
               - Kingsford {3} @S`],
+  ['REGRESSION: an authored gap is a floor, not a target', `
+---
+direction: compass
+tiers: bar=Waypoint, circle=Town
+---
+- Hub {2}
+  - Far East {1} @E6
+  - South Way {1} @S
+`],
+  ['REGRESSION: spacing: manual leaves the gaps alone', `
+---
+direction: compass
+spacing: manual
+tiers: bar=Waypoint, circle=Town
+---
+- Hub {2}
+  - North Way {1} @N
+    - Overlap One {2} @E
+  - East Way {1} @E
+    - Overlap Two {2} @N
+`],
   ['Compass: bearings place the map', `
 ---
 direction: compass
