@@ -412,18 +412,21 @@ class MindMapRenderer {
       return Number.isFinite(n) ? n : fallback;
     };
     const bool = (v, fallback) => (v === undefined ? fallback : isTrue(v));
+    // Several options answer to two spellings, the hyphenated one for
+    // anyone who writes the rest of their front matter that way.
+    const alias = (a, b) => (a !== undefined ? a : b);
 
     const dir = String(o.direction || '').toLowerCase();
     const named = dir === 'right' || dir === 'both' || dir === 'compass';
     return {
       direction: named ? dir : s.direction,
       maxHeight: num(o.height, s.maxHeight),
-      fontSize: num(o.fontSize !== undefined ? o.fontSize : o['font-size'], s.fontSize),
+      fontSize: num(alias(o.fontSize, o['font-size']), s.fontSize),
       hGap: num(o.hGap, s.hGap),
       vGap: num(o.vGap, s.vGap),
       maxNodeWidth: num(o.nodeWidth, s.maxNodeWidth),
-      minFontSize: num(o.minFont !== undefined ? o.minFont : o['min-font'], s.minFontSize),
-      colorful: bool(o.color !== undefined ? o.color : o.colorful, s.colorfulBranches),
+      minFontSize: num(alias(o.minFont, o['min-font']), s.minFontSize),
+      colorful: bool(alias(o.color, o.colorful), s.colorfulBranches),
       edgeStyle: /^(dashed|solid)$/i.test(o.edges || '')
         ? o.edges.toLowerCase() : s.edgeStyle,
       // Compass maps space themselves out unless asked not to. `manual`
@@ -455,6 +458,7 @@ class MindMapRenderer {
     this.links = parsed.links;
     this.unresolvedLinks = parsed.unresolved;
     this.root = parsed.root;
+    this.nodes = null;
     this.cfg = this.config();
 
     if (parsed.isEmpty) {
@@ -580,11 +584,19 @@ class MindMapRenderer {
 
   /* ---- node DOM ---- */
 
+  /**
+   * Every node, in reading order. The tree is fixed once parsed — layout
+   * moves nodes but never adds or removes one — so this is walked once and
+   * handed out, rather than rebuilt on each of the four callers.
+   */
   allNodes() {
-    const out = [];
-    const walk = (n) => { out.push(n); n.children.forEach(walk); };
-    walk(this.root);
-    return out;
+    if (!this.nodes) {
+      const out = [];
+      const walk = (n) => { out.push(n); n.children.forEach(walk); };
+      walk(this.root);
+      this.nodes = out;
+    }
+    return this.nodes;
   }
 
   createNodeElements() {
@@ -851,10 +863,10 @@ class MindMapRenderer {
       const from = child.parent;
       if (!from) continue;
 
-      const pm = this.markerPoint(from, 0, 0);
-      const cm = this.markerPoint(child, 0, 0);
-      const A = this.boxAnchor(from, cm.x, cm.y, 0, 0);
-      const B = this.boxAnchor(child, pm.x, pm.y, 0, 0);
+      const pm = this.markerPoint(from);
+      const cm = this.markerPoint(child);
+      const A = this.boxAnchor(from, cm.x, cm.y);
+      const B = this.boxAnchor(child, pm.x, pm.y);
       const dx = B.x - A.x;
       const dy = B.y - A.y;
       const len = Math.hypot(dx, dy);
@@ -899,14 +911,18 @@ class MindMapRenderer {
   /** The worst-overlapping pair, with how far each axis is penetrated. */
   worstOverlap(nodes, margin) {
     let worst = null;
+    // Every pair is tested on every pass, so the boxes are worked out once
+    // here rather than twice for each of the n-squared pairs.
+    const rects = nodes.map((n) => this.nodeRect(n));
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
+      const ra = rects[i];
       for (let j = i + 1; j < nodes.length; j++) {
         const b = nodes[j];
-        const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) + margin;
+        const rb = rects[j];
+        const ox = Math.min(ra.r, rb.r) - Math.max(ra.l, rb.l) + margin;
         if (ox <= 0) continue;
-        const oy = Math.min(a.y + a.h / 2, b.y + b.h / 2)
-          - Math.max(a.y - a.h / 2, b.y - b.h / 2) + margin;
+        const oy = Math.min(ra.b, rb.b) - Math.max(ra.t, rb.t) + margin;
         if (oy <= 0) continue;
 
         const amount = Math.min(ox, oy);
@@ -1093,10 +1109,11 @@ class MindMapRenderer {
     let maxY = -Infinity;
 
     for (const n of this.allNodes()) {
-      minX = Math.min(minX, n.x);
-      maxX = Math.max(maxX, n.x + n.w);
-      minY = Math.min(minY, n.y - n.h / 2);
-      maxY = Math.max(maxY, n.y + n.h / 2);
+      const r = this.nodeRect(n);
+      minX = Math.min(minX, r.l);
+      maxX = Math.max(maxX, r.r);
+      minY = Math.min(minY, r.t);
+      maxY = Math.max(maxY, r.b);
     }
 
     return {
@@ -1118,9 +1135,8 @@ class MindMapRenderer {
     this.canvas.style.height = b.height + 'px';
 
     for (const n of this.allNodes()) {
-      n.el.style.transform =
-        'translate(' + (n.x + ox) + 'px,' + (n.y + oy - n.h / 2) + 'px)';
-
+      const r = this.nodeRect(n, ox, oy);
+      n.el.style.transform = 'translate(' + r.l + 'px,' + r.t + 'px)';
     }
 
     this.svg.setAttribute('width', String(b.width));
@@ -1198,15 +1214,27 @@ class MindMapRenderer {
   }
 
   /** The node's marker, in canvas coordinates: where the place actually is. */
-  markerPoint(node, ox, oy) {
+  markerPoint(node, ox = 0, oy = 0) {
     return {
-      x: node.x + node.w / 2 + (ox || 0),
-      y: node.y + (node.markerDy || 0) + (oy || 0),
+      x: node.x + node.w / 2 + ox,
+      y: node.y + (node.markerDy || 0) + oy,
+    };
+  }
+
+  /**
+   * A node's whole box in canvas coordinates. Worth saying in one place: a
+   * node records x as its left edge but y as the line of its marker, not
+   * the top of its box, so the two axes do not read alike.
+   */
+  nodeRect(node, ox = 0, oy = 0) {
+    return {
+      l: node.x + ox, r: node.x + node.w + ox,
+      t: node.y - node.h / 2 + oy, b: node.y + node.h / 2 + oy,
     };
   }
 
   /** A measured part of a node, as a rect in canvas coordinates. */
-  partRect(node, part, ox, oy) {
+  partRect(node, part, ox = 0, oy = 0) {
     if (!part) return null;
     const cx = node.x + node.w / 2 + ox + part.dx;
     const cy = node.y + oy + part.dy;
@@ -1248,7 +1276,7 @@ class MindMapRenderer {
    * height of the marker that width is empty. A road heading south does
    * still clear the name, because there the name really is in the way.
    */
-  boxAnchor(node, tx, ty, ox, oy) {
+  boxAnchor(node, tx, ty, ox = 0, oy = 0) {
     const p = this.markerPoint(node, ox, oy);
     const dx = tx - p.x;
     const dy = ty - p.y;
@@ -1260,10 +1288,7 @@ class MindMapRenderer {
         this.rayExit(this.partRect(node, node.labelBox, ox, oy), p, dx, dy),
       )
       // Untiered: the node is one undivided block, so the box is the shape.
-      : this.rayExit({
-        l: node.x + ox, r: node.x + node.w + ox,
-        t: node.y - node.h / 2 + oy, b: node.y + node.h / 2 + oy,
-      }, p, dx, dy);
+      : this.rayExit(this.nodeRect(node, ox, oy), p, dx, dy);
 
     return { x: p.x + dx * t, y: p.y + dy * t };
   }
@@ -1626,6 +1651,69 @@ class MindMapPlugin extends Plugin {
   }
 }
 
+/**
+ * Every setting is the same shape: a name, a note on what it is for, and
+ * one control writing one key. Kept as a table so adding a setting is a
+ * row rather than another nine lines of the same wiring.
+ */
+const SETTINGS_UI = [
+  {
+    key: 'direction',
+    name: 'Layout direction',
+    desc: 'Balanced spreads branches either side of the centre; rightward keeps one column.',
+    dropdown: [['both', 'Balanced (both sides)'], ['right', 'Rightward']],
+  },
+  {
+    key: 'colorfulBranches',
+    name: 'Colourful branches',
+    desc: 'Give each top-level branch its own hue. When off, everything uses the theme accent.',
+    toggle: true,
+  },
+  {
+    key: 'maxHeight',
+    name: 'Maximum height',
+    desc: 'Tallest a mind map may grow before it scales down to fit (px).',
+    slider: [200, 1200, 20],
+  },
+  {
+    key: 'fontSize',
+    name: 'Font size',
+    desc: 'Base text size for map nodes (px).',
+    slider: [10, 24, 1],
+  },
+  {
+    key: 'hGap',
+    name: 'Horizontal spacing',
+    desc: 'Gap between depth columns (px).',
+    slider: [16, 120, 2],
+  },
+  {
+    key: 'vGap',
+    name: 'Vertical spacing',
+    desc: 'Gap between sibling nodes (px).',
+    slider: [2, 48, 1],
+  },
+  {
+    key: 'maxNodeWidth',
+    name: 'Node width limit',
+    desc: 'Width at which node text starts wrapping (px).',
+    slider: [120, 480, 10],
+  },
+  {
+    key: 'edgeStyle',
+    name: 'Edge style',
+    desc: 'Dashed suits a route map; solid suits a mind map.',
+    dropdown: [['solid', 'Solid'], ['dashed', 'Dashed']],
+  },
+  {
+    key: 'minFontSize',
+    name: 'Minimum text size',
+    desc: 'A large map scales down to fit, but never below this. Past it, '
+      + 'the map overflows its box and can be panned instead (px).',
+    slider: [6, 20, 1],
+  },
+];
+
 class MindMapSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -1636,87 +1724,29 @@ class MindMapSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    const commit = () => this.plugin.saveSettings();
+    for (const spec of SETTINGS_UI) {
+      const setting = new Setting(containerEl).setName(spec.name).setDesc(spec.desc);
+      const value = this.plugin.settings[spec.key];
+      const commit = async (v) => {
+        this.plugin.settings[spec.key] = v;
+        await this.plugin.saveSettings();
+      };
 
-    new Setting(containerEl)
-      .setName('Layout direction')
-      .setDesc('Balanced spreads branches either side of the centre; rightward keeps one column.')
-      .addDropdown((d) => d
-        .addOption('both', 'Balanced (both sides)')
-        .addOption('right', 'Rightward')
-        .setValue(this.plugin.settings.direction)
-        .onChange(async (v) => { this.plugin.settings.direction = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Colourful branches')
-      .setDesc('Give each top-level branch its own hue. When off, everything uses the theme accent.')
-      .addToggle((t) => t
-        .setValue(this.plugin.settings.colorfulBranches)
-        .onChange(async (v) => { this.plugin.settings.colorfulBranches = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Maximum height')
-      .setDesc('Tallest a mind map may grow before it scales down to fit (px).')
-      .addSlider((s) => s
-        .setLimits(200, 1200, 20)
-        .setValue(this.plugin.settings.maxHeight)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.maxHeight = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Font size')
-      .setDesc('Base text size for map nodes (px).')
-      .addSlider((s) => s
-        .setLimits(10, 24, 1)
-        .setValue(this.plugin.settings.fontSize)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.fontSize = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Horizontal spacing')
-      .setDesc('Gap between depth columns (px).')
-      .addSlider((s) => s
-        .setLimits(16, 120, 2)
-        .setValue(this.plugin.settings.hGap)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.hGap = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Vertical spacing')
-      .setDesc('Gap between sibling nodes (px).')
-      .addSlider((s) => s
-        .setLimits(2, 48, 1)
-        .setValue(this.plugin.settings.vGap)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.vGap = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Node width limit')
-      .setDesc('Width at which node text starts wrapping (px).')
-      .addSlider((s) => s
-        .setLimits(120, 480, 10)
-        .setValue(this.plugin.settings.maxNodeWidth)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.maxNodeWidth = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Edge style')
-      .setDesc('Dashed suits a route map; solid suits a mind map.')
-      .addDropdown((d) => d
-        .addOption('solid', 'Solid')
-        .addOption('dashed', 'Dashed')
-        .setValue(this.plugin.settings.edgeStyle)
-        .onChange(async (v) => { this.plugin.settings.edgeStyle = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Minimum text size')
-      .setDesc('A large map scales down to fit, but never below this. Past it, '
-        + 'the map overflows its box and can be panned instead (px).')
-      .addSlider((s) => s
-        .setLimits(6, 20, 1)
-        .setValue(this.plugin.settings.minFontSize)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.minFontSize = v; await commit(); }));
+      if (spec.dropdown) {
+        setting.addDropdown((d) => {
+          for (const [v, label] of spec.dropdown) d.addOption(v, label);
+          return d.setValue(value).onChange(commit);
+        });
+      } else if (spec.toggle) {
+        setting.addToggle((t) => t.setValue(value).onChange(commit));
+      } else {
+        setting.addSlider((sl) => sl
+          .setLimits(spec.slider[0], spec.slider[1], spec.slider[2])
+          .setValue(value)
+          .setDynamicTooltip()
+          .onChange(commit));
+      }
+    }
   }
 }
 
