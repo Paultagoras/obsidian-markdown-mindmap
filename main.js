@@ -614,6 +614,17 @@ class MindMapRenderer {
       node.w = Math.max(1, Math.ceil(rect.width));
       node.h = Math.max(1, Math.ceil(rect.height));
 
+      // The marker is the place; the name underneath it is only its caption.
+      // Roads therefore run along the line of the markers, which is not the
+      // middle of the box — so record how far off centre the symbol sits.
+      // It is centred horizontally by the column layout, so only y matters.
+      if (node.markerEl) {
+        const m = node.markerEl.getBoundingClientRect();
+        node.markerDy = (m.top + m.height / 2) - (rect.top + rect.height / 2);
+      } else {
+        node.markerDy = 0;
+      }
+
       this.nodeLayer.appendChild(el);
     }
   }
@@ -710,8 +721,10 @@ class MindMapRenderer {
   layoutCompass() {
     const cfg = this.cfg;
 
-    // Boxes are what get placed, and what roads run between, so a bearing
-    // offsets one box centre from another.
+    // A bearing is between two places, and a place is its marker, so a
+    // bearing offsets one marker from another and the box hangs off that.
+    // Measuring centre to centre instead would tilt every road by however
+    // much two boxes differ in height.
     this.root.x = -this.root.w / 2;
     this.root.y = 0;
     this.root.side = 1;
@@ -724,7 +737,7 @@ class MindMapRenderer {
         groups.get(name).push(child);
       }
 
-      const from = { x: node.x + node.w / 2, y: node.y };
+      const from = this.markerPoint(node);
 
       for (const [name, kids] of groups) {
         const u = COMPASS[name];
@@ -745,8 +758,9 @@ class MindMapRenderer {
             + extent(node, u.x, u.y) / 2
             + extent(child, u.x, u.y) / 2;
 
+          // Solve for the box centre that puts this child's marker there.
           child.x = from.x + u.x * along + px * across - child.w / 2;
-          child.y = from.y + u.y * along + py * across;
+          child.y = from.y + u.y * along + py * across - (child.markerDy || 0);
           child.side = u.x < -0.01 ? -1 : 1;
           place(child, name);
         }
@@ -918,11 +932,14 @@ class MindMapRenderer {
   }
 
   /**
-   * Pills are met at their middle; deeper nodes are drawn as text sitting on
-   * a coloured rule, so the branch joins that rule instead and the stroke
-   * reads as one continuous line.
+   * A tiered node is met on the line of its marker, because the marker is
+   * the place and the name under it is only a caption. Otherwise: pills are
+   * met at their middle, and deeper nodes are drawn as text sitting on a
+   * coloured rule, so the branch joins that rule and the stroke reads as
+   * one continuous line.
    */
   anchorY(node) {
+    if (node.markerEl) return node.y + (node.markerDy || 0);
     return node.depth >= 2 ? node.y + node.h / 2 - 1 : node.y;
   }
 
@@ -948,22 +965,36 @@ class MindMapRenderer {
     renderInline(child.edgeLabel, el, (target, ev) => this.openLink(target, ev));
   }
 
-  /** Where a ray from the node's centre toward (tx, ty) leaves its box. */
-  boxAnchor(node, tx, ty, ox, oy) {
-    const cx = node.x + node.w / 2 + ox;
-    const cy = node.y + oy;
-    const dx = tx - cx;
-    const dy = ty - cy;
-    if (!dx && !dy) return { x: cx, y: cy };
+  /** The node's marker, in canvas coordinates: where the place actually is. */
+  markerPoint(node, ox, oy) {
+    return {
+      x: node.x + node.w / 2 + (ox || 0),
+      y: node.y + (node.markerDy || 0) + (oy || 0),
+    };
+  }
 
-    const hw = node.w / 2;
-    const hh = node.h / 2;
-    // Scale the ray until it touches the nearer of the two box edges.
+  /**
+   * Where a ray from the node's marker toward (tx, ty) leaves its box.
+   *
+   * Aimed from the marker rather than from the middle of the box, so a road
+   * leaves at the height of the symbol instead of at the top of the name.
+   * It still stops at the box, so neither the symbol nor the name is
+   * crossed. The marker sits above centre, so the ray starts off centre and
+   * each of the four edges has to be solved for separately.
+   */
+  boxAnchor(node, tx, ty, ox, oy) {
+    const p = this.markerPoint(node, ox, oy);
+    const dx = tx - p.x;
+    const dy = ty - p.y;
+    if (!dx && !dy) return p;
+
+    const left = node.x + ox;
+    const top = node.y - node.h / 2 + oy;
     const t = Math.min(
-      dx ? hw / Math.abs(dx) : Infinity,
-      dy ? hh / Math.abs(dy) : Infinity,
+      dx > 0 ? (left + node.w - p.x) / dx : dx < 0 ? (left - p.x) / dx : Infinity,
+      dy > 0 ? (top + node.h - p.y) / dy : dy < 0 ? (top - p.y) / dy : Infinity,
     );
-    return { x: cx + dx * t, y: cy + dy * t };
+    return { x: p.x + dx * t, y: p.y + dy * t };
   }
 
   /**
@@ -982,8 +1013,8 @@ class MindMapRenderer {
       // column a dozen pixels apart behind labels several times that wide.
       // Aiming the curve at the other node just drives it through the text,
       // so leave from the outer edge of each and swing round outside both.
-      const p1 = { x: (outA > 0 ? a.x + a.w : a.x) + ox, y: a.y + oy };
-      const p2 = { x: (outB > 0 ? b.x + b.w : b.x) + ox, y: b.y + oy };
+      const p1 = { x: (outA > 0 ? a.x + a.w : a.x) + ox, y: this.anchorY(a) + oy };
+      const p2 = { x: (outB > 0 ? b.x + b.w : b.x) + ox, y: this.anchorY(b) + oy };
       const bow = Math.max(28, Math.min(70, Math.abs(p2.y - p1.y) * 0.8));
 
       const path = document.createElementNS(SVG_NS, 'path');
@@ -998,8 +1029,8 @@ class MindMapRenderer {
     }
 
     // Opposite wings: no shared outside to route along, so head across.
-    const ac = { x: a.x + a.w / 2 + ox, y: a.y + oy };
-    const bc = { x: b.x + b.w / 2 + ox, y: b.y + oy };
+    const ac = this.markerPoint(a, ox, oy);
+    const bc = this.markerPoint(b, ox, oy);
     const p1 = this.boxAnchor(a, bc.x, bc.y, ox, oy);
     const p2 = this.boxAnchor(b, ac.x, ac.y, ox, oy);
 
@@ -1055,8 +1086,8 @@ class MindMapRenderer {
       // Roads on a map run straight between places, and the bearing already
       // decided where those places are, so there is nothing for a curve to
       // express here.
-      const pc = { x: parent.x + parent.w / 2 + ox, y: parent.y + oy };
-      const cc = { x: child.x + child.w / 2 + ox, y: child.y + oy };
+      const pc = this.markerPoint(parent, ox, oy);
+      const cc = this.markerPoint(child, ox, oy);
       const a = this.boxAnchor(parent, cc.x, cc.y, ox, oy);
       const b = this.boxAnchor(child, pc.x, pc.y, ox, oy);
 

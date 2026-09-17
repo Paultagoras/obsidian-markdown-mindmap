@@ -100,11 +100,14 @@ Names after `=` are optional and label the key; without them the key reads
 "Tier 1", "Tier 2" and so on. A key renders under the map unless you set
 `legend: false`.
 
-Edges meet the **marker**, not the label — the marker is the place on the
-route, the label is only its name. A tiered node is a symbol over a caption: the name always sits under the
-marker. Roads run between the boxes those two make, meeting each box at its
-edge — so a road stops short of a node rather than running into it, and
-neither the symbol nor the name is ever crossed.
+A tiered node is a symbol over a caption: the name always sits under the
+marker. Roads run along the **line of the markers**, because the marker is
+the place and the name below it is only what the place is called — and they
+stop at the edge of the box the two of them make, so a road ends short of a
+node rather than running into it and neither the symbol nor the name is ever
+crossed. Bearings are measured marker to marker for the same reason:
+measuring between box centres instead would tilt a road by however much two
+nodes differ in height.
 Nodes you leave unmarked keep the normal depth styling, so you can tag only
 what matters.
 
