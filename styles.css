@@ -7,6 +7,7 @@
 .mindmap-blocks {
   --mm-font-size: 15px;
   --mm-node-max-width: 260px;
+  --mm-marker-fill: var(--background-primary);
   position: relative;
   margin: 0.75em 0;
 }
@@ -238,9 +239,13 @@
   text-align: center;
 }
 
+/* Nodes paint above the edge layer, so an opaque marker hides the route
+   behind it: the line meets the symbol and stops, instead of running
+   visibly through a hollow one. */
 .mindmap-blocks .mm-marker {
   flex: none;
   box-sizing: border-box;
+  background: var(--mm-marker-fill);
 }
 
 .mindmap-blocks .mm-shape-bar {
@@ -255,6 +260,11 @@
   height: var(--mm-marker);
   border: 3px solid var(--mm-branch-color);
   border-radius: 50%;
+}
+
+/* The key sits on its own panel, so its markers fill to match that. */
+.mindmap-blocks .mm-legend {
+  --mm-marker-fill: var(--background-secondary);
 }
 
 .mindmap-blocks .mm-shape-square,
