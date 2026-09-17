@@ -101,12 +101,14 @@ Names after `=` are optional and label the key; without them the key reads
 `legend: false`.
 
 Edges meet the **marker**, not the label — the marker is the place on the
-route, the label is only its name. A node the route continues through puts
-its marker on the line and its name across the road from it, so the line
-runs marker to marker unbroken. In a compass map "across the road" follows
-the bearing: underneath on an east-west road, and alongside on a
-north-south one, where underneath would sit on the road itself. A leaf,
-having no outgoing line, keeps its name alongside.
+route, the label is only its name. In a compass map a name goes on whichever side no road uses, scored against
+every road at that node — the one back to its parent and one out to each
+child. Scoring against all of them is what keeps a name off the road east
+out of Glasspoint, which the node's own bearing knows nothing about. A
+junction with roads in all four quarters has no free side; there the name
+takes the best one and covers the road behind it, as a label on a drawn map
+does. Elsewhere the flow is horizontal: a node the route passes through puts
+its name underneath, and a leaf keeps its name alongside.
 Nodes you leave unmarked keep the normal depth styling, so you can tag only
 what matters.
 

@@ -192,6 +192,14 @@
   pointer-events: none;
 }
 
+/* Names are opaque for the same reason markers are: where a road has to
+   cross one, it passes behind the words instead of through them. */
+.mindmap-blocks .mm-node.mm-tiered .mm-label {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--mm-marker-fill);
+}
+
 /* Opaque, so the road runs behind the name rather than through it. */
 .mindmap-blocks .mm-edge-label {
   position: absolute;
@@ -253,6 +261,25 @@
 .mindmap-blocks .mm-node.mm-tiered.mm-side-left {
   flex-direction: row-reverse;
 }
+
+/* A compass node puts its name on whichever side no road uses. Declared
+   after the side flip above, which it must override. */
+.mindmap-blocks .mm-node.mm-tiered.mm-label-right { flex-direction: row; }
+.mindmap-blocks .mm-node.mm-tiered.mm-label-left { flex-direction: row-reverse; }
+
+.mindmap-blocks .mm-node.mm-tiered.mm-label-below,
+.mindmap-blocks .mm-node.mm-tiered.mm-label-above {
+  align-items: center;
+  gap: 2px;
+  padding: 0 0.3em 0.1em;
+}
+
+.mindmap-blocks .mm-node.mm-tiered.mm-label-below { flex-direction: column; }
+.mindmap-blocks .mm-node.mm-tiered.mm-label-above { flex-direction: column-reverse; }
+
+.mindmap-blocks .mm-node.mm-tiered.mm-label-below .mm-label,
+.mindmap-blocks .mm-node.mm-tiered.mm-label-above .mm-label { text-align: center; }
+
 
 /* A node the route continues through: marker on the line, label beneath it.
    Column order is the same on either wing, so this overrides the flip. */
