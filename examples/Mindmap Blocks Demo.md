@@ -161,6 +161,8 @@ so you only write a bearing where the route turns.
 ```mindmap
 ---
 direction: compass
+edges: dashed
+height: 720
 tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
 ---
 - Portsmith {2}

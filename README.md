@@ -69,6 +69,7 @@ height: 400
 | `legend` | `true`, `false` | Show the key under a tiered map |
 | `link` | `A -> B` | Connect two nodes across the tree; may repeat |
 | `minFont` | px | Auto-fit will not shrink text below this |
+| `edges` | `solid`, `dashed` | Route style; dashed suits a map |
 
 ### Tiers
 
@@ -195,6 +196,13 @@ tree: each node sits where its parent puts it. That suits loops between
 nearby places — the roundabout route above draws as a 60px arc on a
 1000px-wide map — but a link between two distant corners will be a long
 line, because neither end can move to meet the other.
+
+### Edge style
+
+`edges: dashed` draws the connections as dashed lines, which reads as a map
+rather than a diagram; `solid` is the default and suits a mind map. Set it
+per map, or for everything in settings. Cross-links keep a shorter dash of
+their own so they stay distinguishable either way.
 
 ### Readability
 

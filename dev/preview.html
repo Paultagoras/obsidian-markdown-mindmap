@@ -175,6 +175,8 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
   ['Reference: full map by compass', `
 ---
 direction: compass
+edges: dashed
+height: 720
 tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
 ---
 - Portsmith {2}
@@ -303,7 +305,7 @@ tiers: circle=Major, diamond=Capital
 const fakePlugin = {
   settings: {
     direction: 'both', maxHeight: 600, fontSize: 15, hGap: 46, vGap: 12,
-    maxNodeWidth: 260, minFontSize: 15, colorfulBranches: true,
+    maxNodeWidth: 260, minFontSize: 15, colorfulBranches: true, edgeStyle: 'solid',
   },
   app: { workspace: { openLinkText: (t) => console.log('open:', t) } },
 };

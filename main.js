@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
   maxNodeWidth: 260,      // px before node text wraps
   minFontSize: 15,        // px, auto-fit never shrinks text below this
   colorfulBranches: true, // give each top-level branch its own hue
+  edgeStyle: 'solid',     // 'solid' | 'dashed'
 };
 
 // Hues chosen to stay legible on both light and dark Obsidian themes.
@@ -403,6 +404,8 @@ class MindMapRenderer {
       maxNodeWidth: num(o.nodeWidth, s.maxNodeWidth),
       minFontSize: num(o.minFont !== undefined ? o.minFont : o['min-font'], s.minFontSize),
       colorful: bool(o.color !== undefined ? o.color : o.colorful, s.colorfulBranches),
+      edgeStyle: /^(dashed|solid)$/i.test(o.edges || '')
+        ? o.edges.toLowerCase() : s.edgeStyle,
     };
   }
 
@@ -445,6 +448,7 @@ class MindMapRenderer {
       return;
     }
 
+    this.el.classList.toggle('mm-dashed', this.cfg.edgeStyle === 'dashed');
     this.el.style.setProperty('--mm-font-size', this.cfg.fontSize + 'px');
     this.el.style.setProperty('--mm-node-max-width', this.cfg.maxNodeWidth + 'px');
 
@@ -1371,6 +1375,15 @@ class MindMapSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.maxNodeWidth)
         .setDynamicTooltip()
         .onChange(async (v) => { this.plugin.settings.maxNodeWidth = v; await commit(); }));
+
+    new Setting(containerEl)
+      .setName('Edge style')
+      .setDesc('Dashed suits a route map; solid suits a mind map.')
+      .addDropdown((d) => d
+        .addOption('solid', 'Solid')
+        .addOption('dashed', 'Dashed')
+        .setValue(this.plugin.settings.edgeStyle)
+        .onChange(async (v) => { this.plugin.settings.edgeStyle = v; await commit(); }));
 
     new Setting(containerEl)
       .setName('Minimum text size')

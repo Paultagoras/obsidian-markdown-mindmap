@@ -178,11 +178,17 @@
 .mindmap-blocks .mm-viewport.mm-clip-top .mm-fade { --mm-fade-t: var(--background-primary); }
 .mindmap-blocks .mm-viewport.mm-clip-bottom .mm-fade { --mm-fade-b: var(--background-primary); }
 
+/* Dashed routes read as a map rather than a diagram. Longer dashes than a
+   cross-link uses, so the two stay distinguishable when both are dashed. */
+.mindmap-blocks.mm-dashed .mm-edge {
+  stroke-dasharray: 6 4;
+}
+
 /* ---- cross-links ---- */
 
 /* Drawn dashed and dimmer than the tree edges: a cross-link is a real
    connection, but the tree is what explains the shape of the map. */
-.mindmap-blocks .mm-crosslink {
+.mindmap-blocks .mm-edge.mm-crosslink {
   stroke-width: 1.8;
   stroke-dasharray: 4 3;
   opacity: 0.7;
