@@ -152,6 +152,31 @@
   border-radius: 4px;
 }
 
+/* ---- overflow fades ---- */
+
+/* Auto-fit stops at a readable size, so a wide map overflows rather than
+   shrinking. These mark the edges that have more map beyond them. */
+.mindmap-blocks .mm-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  --mm-fade-l: transparent;
+  --mm-fade-r: transparent;
+  --mm-fade-t: transparent;
+  --mm-fade-b: transparent;
+  box-shadow:
+    inset 26px 0 20px -20px var(--mm-fade-l),
+    inset -26px 0 20px -20px var(--mm-fade-r),
+    inset 0 26px 20px -20px var(--mm-fade-t),
+    inset 0 -26px 20px -20px var(--mm-fade-b);
+}
+
+.mindmap-blocks .mm-viewport.mm-clip-left .mm-fade { --mm-fade-l: var(--background-primary); }
+.mindmap-blocks .mm-viewport.mm-clip-right .mm-fade { --mm-fade-r: var(--background-primary); }
+.mindmap-blocks .mm-viewport.mm-clip-top .mm-fade { --mm-fade-t: var(--background-primary); }
+.mindmap-blocks .mm-viewport.mm-clip-bottom .mm-fade { --mm-fade-b: var(--background-primary); }
+
 /* ---- cross-links ---- */
 
 /* Drawn dashed and dimmer than the tree edges: a cross-link is a real

@@ -425,6 +425,9 @@ class MindMapRenderer {
     this.svg.setAttribute('class', 'mm-edges');
     this.canvas.appendChild(this.svg);
     this.nodeLayer = this.canvas.createDiv({ cls: 'mm-nodes' });
+    // Sits above the canvas so the fades can actually cover clipped nodes;
+    // an inset shadow on the viewport itself would paint under them.
+    this.viewport.createDiv({ cls: 'mm-fade' });
 
     this.assignColors();
     this.createNodeElements();
@@ -810,6 +813,32 @@ class MindMapRenderer {
    * second link running the other way between the same pair.
    */
   crossLinkPath(a, b, ox, oy) {
+    const rootX = this.root.x + this.root.w / 2 + ox;
+    const outward = (n) => n.side || (n.x + n.w / 2 + ox >= rootX ? 1 : -1);
+    const outA = outward(a);
+    const outB = outward(b);
+
+    if (outA === outB) {
+      // The common case: both ends on the same wing, often stacked in one
+      // column a dozen pixels apart behind labels several times that wide.
+      // Aiming the curve at the other node just drives it through the text,
+      // so leave from the outer edge of each and swing round outside both.
+      const p1 = { x: (outA > 0 ? a.x + a.w : a.x) + ox, y: a.y + oy };
+      const p2 = { x: (outB > 0 ? b.x + b.w : b.x) + ox, y: b.y + oy };
+      const bow = Math.max(28, Math.min(70, Math.abs(p2.y - p1.y) * 0.8));
+
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d',
+        'M' + p1.x + ',' + p1.y
+        + ' C' + (p1.x + outA * bow) + ',' + p1.y
+        + ' ' + (p2.x + outB * bow) + ',' + p2.y
+        + ' ' + p2.x + ',' + p2.y);
+      path.setAttribute('class', 'mm-edge mm-crosslink');
+      path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
+      return path;
+    }
+
+    // Opposite wings: no shared outside to route along, so head across.
     const ac = { x: a.x + a.w / 2 + ox, y: a.y + oy };
     const bc = { x: b.x + b.w / 2 + ox, y: b.y + oy };
     const p1 = this.boxAnchor(a, bc.x, bc.y, ox, oy);
@@ -818,24 +847,31 @@ class MindMapRenderer {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const dist = Math.hypot(dx, dy) || 1;
-    // Short links still need a visible arc, or they read as a stray tick.
-    const bow = Math.max(22, Math.min(70, dist * 0.3));
+    // A bow proportional to a short gap is a tick rather than a route.
+    const bow = Math.max(34, Math.min(80, dist * 0.35));
 
     // Bow away from the root. The two perpendiculars are equally valid, but
     // the inward one dives back through the tree, where the node boxes cover
     // it — which is what makes a loop fail to read as a loop.
     const midX = (p1.x + p2.x) / 2;
     const midY = (p1.y + p2.y) / 2;
-    const rootX = this.root.x + this.root.w / 2 + ox;
     const rootY = this.root.y + oy;
     const away = ((midX - rootX) * -dy + (midY - rootY) * dx) >= 0 ? 1 : -1;
 
-    const mx = midX - (dy / dist) * bow * away;
-    const my = midY + (dx / dist) * bow * away;
+    // Two control points rather than one: the curve leaves and rejoins each
+    // node closer to square-on, which reads as a road going round rather
+    // than a line clipping past.
+    const nx = (-dy / dist) * bow * away;
+    const ny = (dx / dist) * bow * away;
+    const c1x = p1.x + dx * 0.25 + nx;
+    const c1y = p1.y + dy * 0.25 + ny;
+    const c2x = p1.x + dx * 0.75 + nx;
+    const c2y = p1.y + dy * 0.75 + ny;
 
     const path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute('d',
-      'M' + p1.x + ',' + p1.y + ' Q' + mx + ',' + my + ' ' + p2.x + ',' + p2.y);
+      'M' + p1.x + ',' + p1.y
+      + ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2.x + ',' + p2.y);
     path.setAttribute('class', 'mm-edge mm-crosslink');
     path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
     return path;
@@ -920,6 +956,26 @@ class MindMapRenderer {
   applyTransform() {
     this.canvas.style.transform =
       'translate(' + this.tx + 'px,' + this.ty + 'px) scale(' + this.scale + ')';
+    this.updateClipHints();
+  }
+
+  /**
+   * Fade the edges that have content beyond them. Once auto-fit stops at a
+   * readable size a wide map has to overflow, and without this the branches
+   * simply stop at the border with no sign there is more to pan to.
+   */
+  updateClipHints() {
+    if (!this.bbox) return;
+    const vw = this.viewport.clientWidth;
+    const vh = this.viewport.clientHeight;
+    if (!vw) return;
+    const contentW = this.bbox.width * this.scale;
+    const contentH = this.bbox.height * this.scale;
+
+    this.viewport.classList.toggle('mm-clip-left', this.tx < -1);
+    this.viewport.classList.toggle('mm-clip-right', this.tx + contentW > vw + 1);
+    this.viewport.classList.toggle('mm-clip-top', this.ty < -1);
+    this.viewport.classList.toggle('mm-clip-bottom', this.ty + contentH > vh + 1);
   }
 
   zoomBy(factor, originX, originY) {

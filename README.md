@@ -153,6 +153,10 @@ with `minFont`). Past that it stops shrinking, overflows its box, and is
 panned instead. Shrinking without a floor turns a large map into an
 unreadable thumbnail.
 
+Edges with more map beyond them are faded, so an overflowing map looks
+like it continues rather than like it was cut off. Drag to bring the rest
+into view.
+
 ### Interacting
 
 A map always shows itself in full — there is nothing to expand and no
