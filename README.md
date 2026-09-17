@@ -85,13 +85,13 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
   - Breakwater {1}
     - Glasspoint {2}
       - Northreach {2}
-      - Saltwatch {1}
+      - Crow's Rest {1}
   - Redwater {1}
     - Stone River {3}
 ```
 ~~~
 
-`Northreach {2}` and `Saltwatch {1}` are siblings with different markers,
+`Northreach {2}` and `Crow's Rest {1}` are siblings with different markers,
 which is the whole point — tier is a property of the thing, not of its
 position. Shapes available: `bar`, `circle`, `diamond`, `square`, `pill`.
 Names after `=` are optional and label the key; without them the key reads
@@ -124,7 +124,6 @@ direction: compass
   - Breakwater @N
     - Glasspoint
       - Northreach @N
-      - Saltwatch @W
       - Crow's Rest @E
   - Beachwood @S
   - Redwater @E

@@ -94,8 +94,8 @@ With no single root, the branches meet at a small neutral hub.
 ## Tiers
 
 Mark what a node *is*, independently of how deep it sits. Declare the tiers,
-then tag nodes with `{n}`. Northreach and Saltwatch are siblings here, with
-different markers.
+then tag nodes with `{n}`. Northreach and Crow's Rest are siblings here,
+with different markers.
 
 ```mindmap
 ---
@@ -105,8 +105,7 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
   - Breakwater {1}
     - Glasspoint {2}
       - Northreach {2}
-      - Saltwatch {1}
-      - Greyhaven {1}
+      - Crow's Rest {1}
   - Redwater {1}
     - Clearwater {1}
       - Stone River {3}
@@ -148,7 +147,7 @@ other — which is what a local loop is.
 
 ## The full route map
 
-The Settlement Route Map redrawn with the plugin: 37 settlements, three
+The Settlement Route Map redrawn with the plugin: 34 settlements, three
 tiers, placed by compass so it reads as a map rather than as columns by
 distance. Portsmith is the hub — the northern road runs up through
 Breakwater to Glasspoint and east to Stonewright, the southern road down
@@ -168,8 +167,6 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
   - Breakwater {1} @N
     - Glasspoint {2}
       - Northreach {2} @N
-      - Saltwatch {1} @W
-      - Greyhaven {1} @W
       - Crow's Rest {1} @E
         - Stonewright {2}
           - Slate Camp {1} @NE
@@ -177,8 +174,7 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
           - Farpoint {2} @SE
   - Beachwood {1} @S
     - Smithport {2}
-      - Driftwood {1} @W
-      - Brinehook {1} @S
+      - Driftwood {1} @S
       - Southbay {2} @E
   - Redwater {1} @E3
     - Ash Hollow {1} @S
@@ -210,9 +206,9 @@ makes room for that road to run due south, as it should. Clearwater runs
 `@E2` for the same reason.
 
 That is the shape of the work: placing by hand means you own the collisions,
-and the fixes are to change a bearing or to push something further out.
-Saltwatch and Greyhaven both run `@W` from Glasspoint, which fans them apart
-vertically rather than stacking them on one line.
+and the fixes are to change a bearing or to push something further out. Where
+two places do share a bearing — both `@W` of the same hub, say — they are
+fanned apart across it rather than stacked on one line.
 
 One thing the original drawing still says that this cannot: the routes
 named between settlements — *Ancient Tunnels* from Stone River to
