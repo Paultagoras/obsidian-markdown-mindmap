@@ -47,6 +47,14 @@ const COMPASS = {
 };
 
 /**
+ * One vocabulary for the yes/no options, so `legend: off` and
+ * `edgeLabels: off` mean the same thing wherever they are read. Anything
+ * outside the vocabulary is neither, which leaves the setting on its default.
+ */
+const isTrue = (v) => /^(true|yes|on|1)$/i.test(String(v || '').trim());
+const isFalse = (v) => /^(false|no|off|0)$/i.test(String(v || '').trim());
+
+/**
  * Parse a `tiers:` option into [{ shape, label }].
  *
  *   tiers: bar, circle, diamond
@@ -116,7 +124,7 @@ function parseMindmap(source) {
   const compass = String(options.direction || '').toLowerCase() === 'compass';
   // Naming the road between two places, gated like the rest so "::" stays
   // literal in a map that has not asked for it.
-  const edgeLabels = /^(true|yes|on|1)$/i.test(String(options.edgeLabels || ''));
+  const edgeLabels = isTrue(options.edgeLabels);
 
   let nextId = 0;
   const roots = [];
@@ -403,9 +411,7 @@ class MindMapRenderer {
       const n = parseFloat(v);
       return Number.isFinite(n) ? n : fallback;
     };
-    const bool = (v, fallback) => (
-      v === undefined ? fallback : /^(true|yes|on|1)$/i.test(String(v))
-    );
+    const bool = (v, fallback) => (v === undefined ? fallback : isTrue(v));
 
     const dir = String(o.direction || '').toLowerCase();
     const named = dir === 'right' || dir === 'both' || dir === 'compass';
@@ -422,21 +428,15 @@ class MindMapRenderer {
         ? o.edges.toLowerCase() : s.edgeStyle,
       // Compass maps space themselves out unless asked not to. `manual`
       // is for someone who wants the gaps exactly as they wrote them.
-      autoSpace: !/^(manual|off|false|no)$/i.test(String(o.spacing || '')),
+      autoSpace: !(isFalse(o.spacing) || /^manual$/i.test(String(o.spacing || '').trim())),
     };
   }
 
   /* ---- construction ---- */
 
   build() {
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-    if (this.refitFrame) {
-      cancelAnimationFrame(this.refitFrame);
-      this.refitFrame = 0;
-    }
+    // A rebuild replaces everything the last one wired up.
+    this.destroy();
 
     this.el.empty();
     this.el.addClass('mindmap-blocks');
@@ -539,7 +539,7 @@ class MindMapRenderer {
    */
   buildLegend() {
     if (!this.tiers.length) return;
-    if (/^(false|no|off|0)$/i.test(String(this.options.legend || ''))) return;
+    if (isFalse(this.options.legend)) return;
 
     const bar = this.el.createDiv({ cls: 'mm-legend' });
     bar.createSpan({ cls: 'mm-legend-title', text: 'Key' });
@@ -824,22 +824,15 @@ class MindMapRenderer {
     const PASSES = 120;
     const CEILING = this.cfg.hGap * 60;     // never push a road off the map
 
-    const parent = new Map();
-    const index = (n, p) => {
-      parent.set(n, p);
-      n.children.forEach((c) => index(c, n));
-    };
-    index(this.root, null);
-
     // Boxes first: two names on top of each other is worse than a road
     // clipping one, and settling the boxes often moves the roads clear too.
     const next = () => this.worstOverlap(nodes, MARGIN)
-      || this.worstRoadOverlap(nodes, parent, ROAD);
+      || this.worstRoadOverlap(nodes, ROAD);
 
     for (let pass = 0; pass < PASSES; pass++) {
       const clash = next();
       if (!clash) return true;
-      if (!this.pushApart(clash, parent, CEILING)) return false;
+      if (!this.pushApart(clash, CEILING)) return false;
       place();
     }
     return !next();
@@ -852,10 +845,10 @@ class MindMapRenderer {
    * subtrees can stand well clear of each other and still have a road from
    * one run straight over a name in the other.
    */
-  worstRoadOverlap(nodes, parent, margin) {
+  worstRoadOverlap(nodes, margin) {
     let worst = null;
     for (const child of nodes) {
-      const from = parent.get(child);
+      const from = child.parent;
       if (!from) continue;
 
       const pm = this.markerPoint(from, 0, 0);
@@ -942,10 +935,10 @@ class MindMapRenderer {
    * vertically and still only be separable east, because no bearing at
    * their fork runs north.
    */
-  pushApart(clash, parent, ceiling) {
+  pushApart(clash, ceiling) {
     const chain = (n) => {
       const out = [];
-      for (let x = n; x; x = parent.get(x)) out.push(x);
+      for (let x = n; x; x = x.parent) out.push(x);
       return out.reverse();
     };
     const ca = chain(clash.a);
@@ -1188,6 +1181,22 @@ class MindMapRenderer {
     renderInline(child.edgeLabel, el, (target, ev) => this.openLink(target, ev));
   }
 
+  /**
+   * An edge as an SVG path. Strokes thin out with depth, the way a
+   * hand-drawn map tapers; a cross-link keeps one weight throughout,
+   * because it belongs to no one depth.
+   */
+  svgPath(d, cls, node, depth) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', cls);
+    path.setAttribute('stroke', node.color || 'var(--interactive-accent)');
+    if (depth !== undefined) {
+      path.setAttribute('stroke-width', String(Math.max(1.2, 3.2 - depth * 0.6)));
+    }
+    return path;
+  }
+
   /** The node's marker, in canvas coordinates: where the place actually is. */
   markerPoint(node, ox, oy) {
     return {
@@ -1279,15 +1288,13 @@ class MindMapRenderer {
       const p2 = this.edgeAnchor(b, outB, ox, oy);
       const bow = Math.max(28, Math.min(70, Math.abs(p2.y - p1.y) * 0.8));
 
-      const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d',
+      return this.svgPath(
         'M' + p1.x + ',' + p1.y
         + ' C' + (p1.x + outA * bow) + ',' + p1.y
         + ' ' + (p2.x + outB * bow) + ',' + p2.y
-        + ' ' + p2.x + ',' + p2.y);
-      path.setAttribute('class', 'mm-edge mm-crosslink');
-      path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
-      return path;
+        + ' ' + p2.x + ',' + p2.y,
+        'mm-edge mm-crosslink', a,
+      );
     }
 
     // Opposite wings: no shared outside to route along, so head across.
@@ -1320,13 +1327,11 @@ class MindMapRenderer {
     const c2x = p1.x + dx * 0.75 + nx;
     const c2y = p1.y + dy * 0.75 + ny;
 
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d',
+    return this.svgPath(
       'M' + p1.x + ',' + p1.y
-      + ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2.x + ',' + p2.y);
-    path.setAttribute('class', 'mm-edge mm-crosslink');
-    path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
-    return path;
+      + ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2.x + ',' + p2.y,
+      'mm-edge mm-crosslink', a,
+    );
   }
 
   /**
@@ -1357,13 +1362,10 @@ class MindMapRenderer {
       const a = this.boxAnchor(parent, cc.x, cc.y, ox, oy);
       const b = this.boxAnchor(child, pc.x, pc.y, ox, oy);
 
-      const line = document.createElementNS(SVG_NS, 'path');
-      line.setAttribute('d', 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y);
-      line.setAttribute('class', 'mm-edge');
-      line.setAttribute('stroke', child.color);
-      line.setAttribute('stroke-width',
-        String(Math.max(1.2, 3.2 - child.depth * 0.6)));
-      return line;
+      return this.svgPath(
+        'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y,
+        'mm-edge', child, child.depth,
+      );
     }
 
     const from = this.edgeAnchor(parent, dir, ox, oy);
@@ -1376,15 +1378,11 @@ class MindMapRenderer {
     const y2 = to.y;
     const mid = (x1 + x2) / 2;
 
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d',
-      'M' + x1 + ',' + y1 +
-      ' C' + mid + ',' + y1 + ' ' + mid + ',' + y2 + ' ' + x2 + ',' + y2);
-    path.setAttribute('class', 'mm-edge');
-    path.setAttribute('stroke', child.color);
-    // Strokes thin out with depth, the way a hand-drawn map tapers.
-    path.setAttribute('stroke-width', String(Math.max(1.2, 3.2 - child.depth * 0.6)));
-    return path;
+    return this.svgPath(
+      'M' + x1 + ',' + y1
+      + ' C' + mid + ',' + y1 + ' ' + mid + ',' + y2 + ' ' + x2 + ',' + y2,
+      'mm-edge', child, child.depth,
+    );
   }
 
   /* ---- viewport ---- */
