@@ -103,11 +103,14 @@ Names after `=` are optional and label the key; without them the key reads
 A tiered node is a symbol over a caption: the name always sits under the
 marker. Roads run along the **line of the markers**, because the marker is
 the place and the name below it is only what the place is called — and they
-stop at the edge of the box the two of them make, so a road ends short of a
-node rather than running into it and neither the symbol nor the name is ever
-crossed. Bearings are measured marker to marker for the same reason:
-measuring between box centres instead would tilt a road by however much two
-nodes differ in height.
+they run right up to the symbol, standing off only where a name is
+genuinely in the way. An east-west road meets the marker exactly, because
+beside a marker there is nothing but empty space; a road heading south
+clears the name below its origin, and one heading north clears the name
+below its destination, because there the name really is in its path.
+Nothing else is ever crossed. Bearings are measured marker to marker for
+the same reason: measuring between box centres instead would tilt a road by
+however much two nodes differ in height.
 Nodes you leave unmarked keep the normal depth styling, so you can tag only
 what matters.
 

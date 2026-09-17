@@ -241,8 +241,8 @@
    Higher specificity than the .mm-depth-* and .mm-root-node rules above,
    so it wins wherever a map opts into tiers. */
 /* A tiered node is a symbol over a caption. The name always sits under the
-   marker, and roads meet the box the two of them make rather than either
-   part of it. */
+   marker, and roads meet the marker, stepping around the name only where
+   they would otherwise cross it. */
 .mindmap-blocks .mm-node.mm-tiered {
   --mm-marker: 19px;
   display: flex;

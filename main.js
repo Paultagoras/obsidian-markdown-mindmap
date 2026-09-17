@@ -591,8 +591,9 @@ class MindMapRenderer {
         // rule, so tier reads as a property of the thing, not of its position.
         if (node.tier) {
           el.classList.add('mm-tiered');
-          // The name always sits under the marker, so a node is simply a
-          // box with a symbol over a caption, and roads meet that box.
+          // The name always sits under the marker, so a node is a symbol
+          // over a caption and a road meets the symbol, stepping around
+          // the caption only where it would otherwise cross it.
           const marker = document.createElement('span');
           marker.className = 'mm-marker mm-shape-' + this.tiers[node.tier - 1].shape;
           el.appendChild(marker);
@@ -602,6 +603,7 @@ class MindMapRenderer {
         label.className = 'mm-label';
         renderInline(node.text, label, (target, ev) => this.openLink(target, ev));
         el.appendChild(label);
+        node.labelEl = label;
       }
 
       el.addEventListener('contextmenu', (ev) => this.showContextMenu(ev, node));
@@ -615,15 +617,26 @@ class MindMapRenderer {
       node.h = Math.max(1, Math.ceil(rect.height));
 
       // The marker is the place; the name underneath it is only its caption.
-      // Roads therefore run along the line of the markers, which is not the
-      // middle of the box — so record how far off centre the symbol sits.
-      // It is centred horizontally by the column layout, so only y matters.
-      if (node.markerEl) {
-        const m = node.markerEl.getBoundingClientRect();
-        node.markerDy = (m.top + m.height / 2) - (rect.top + rect.height / 2);
-      } else {
-        node.markerDy = 0;
-      }
+      // Roads run along the line of the markers, which is not the middle of
+      // the box, and they leave the marker rather than the box — so the two
+      // parts are measured separately, each as a rect offset from the box
+      // centre. A rotated diamond reports its rotated size here, which is
+      // the size that matters for keeping a road off it.
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const part = (child) => {
+        if (!child) return null;
+        const r = child.getBoundingClientRect();
+        return {
+          dx: (r.left + r.width / 2) - cx,
+          dy: (r.top + r.height / 2) - cy,
+          w: r.width,
+          h: r.height,
+        };
+      };
+      node.markerBox = part(node.markerEl);
+      node.labelBox = node.markerEl ? part(node.labelEl) : null;
+      node.markerDy = node.markerBox ? node.markerBox.dy : 0;
 
       this.nodeLayer.appendChild(el);
     }
@@ -973,14 +986,48 @@ class MindMapRenderer {
     };
   }
 
+  /** A measured part of a node, as a rect in canvas coordinates. */
+  partRect(node, part, ox, oy) {
+    if (!part) return null;
+    const cx = node.x + node.w / 2 + ox + part.dx;
+    const cy = node.y + oy + part.dy;
+    return {
+      l: cx - part.w / 2, r: cx + part.w / 2,
+      t: cy - part.h / 2, b: cy + part.h / 2,
+    };
+  }
+
   /**
-   * Where a ray from the node's marker toward (tx, ty) leaves its box.
+   * How far along a ray from p it finally leaves rect, or 0 if it never
+   * enters it. Used to push a road clear of something in its way.
+   */
+  rayExit(rect, p, dx, dy) {
+    if (!rect) return 0;
+    let enter = -Infinity;
+    let leave = Infinity;
+    const slab = (lo, hi, o, d) => {
+      if (!d) return o > lo && o < hi;   // parallel: either inside or missing
+      const t1 = (lo - o) / d;
+      const t2 = (hi - o) / d;
+      enter = Math.max(enter, Math.min(t1, t2));
+      leave = Math.min(leave, Math.max(t1, t2));
+      return true;
+    };
+    if (!slab(rect.l, rect.r, p.x, dx)) return 0;
+    if (!slab(rect.t, rect.b, p.y, dy)) return 0;
+    if (leave < Math.max(enter, 0)) return 0;
+    return Math.max(leave, 0);
+  }
+
+  /**
+   * Where a road leaves a node on its way to (tx, ty).
    *
-   * Aimed from the marker rather than from the middle of the box, so a road
-   * leaves at the height of the symbol instead of at the top of the name.
-   * It still stops at the box, so neither the symbol nor the name is
-   * crossed. The marker sits above centre, so the ray starts off centre and
-   * each of the four edges has to be solved for separately.
+   * It starts at the marker, because that is the place, and is pushed out
+   * only by whatever it would otherwise cross. Clipping to the whole box
+   * instead made an east-west road stop thirty-odd pixels short of the
+   * symbol: a box is as wide as the name below the marker, but at the
+   * height of the marker that width is empty. A road heading south does
+   * still clear the name, because there the name really is in the way.
    */
   boxAnchor(node, tx, ty, ox, oy) {
     const p = this.markerPoint(node, ox, oy);
@@ -988,12 +1035,17 @@ class MindMapRenderer {
     const dy = ty - p.y;
     if (!dx && !dy) return p;
 
-    const left = node.x + ox;
-    const top = node.y - node.h / 2 + oy;
-    const t = Math.min(
-      dx > 0 ? (left + node.w - p.x) / dx : dx < 0 ? (left - p.x) / dx : Infinity,
-      dy > 0 ? (top + node.h - p.y) / dy : dy < 0 ? (top - p.y) / dy : Infinity,
-    );
+    const t = node.markerBox
+      ? Math.max(
+        this.rayExit(this.partRect(node, node.markerBox, ox, oy), p, dx, dy),
+        this.rayExit(this.partRect(node, node.labelBox, ox, oy), p, dx, dy),
+      )
+      // Untiered: the node is one undivided block, so the box is the shape.
+      : this.rayExit({
+        l: node.x + ox, r: node.x + node.w + ox,
+        t: node.y - node.h / 2 + oy, b: node.y + node.h / 2 + oy,
+      }, p, dx, dy);
+
     return { x: p.x + dx * t, y: p.y + dy * t };
   }
 
@@ -1013,8 +1065,8 @@ class MindMapRenderer {
       // column a dozen pixels apart behind labels several times that wide.
       // Aiming the curve at the other node just drives it through the text,
       // so leave from the outer edge of each and swing round outside both.
-      const p1 = { x: (outA > 0 ? a.x + a.w : a.x) + ox, y: this.anchorY(a) + oy };
-      const p2 = { x: (outB > 0 ? b.x + b.w : b.x) + ox, y: this.anchorY(b) + oy };
+      const p1 = this.edgeAnchor(a, outA, ox, oy);
+      const p2 = this.edgeAnchor(b, outB, ox, oy);
       const bow = Math.max(28, Math.min(70, Math.abs(p2.y - p1.y) * 0.8));
 
       const path = document.createElementNS(SVG_NS, 'path');
@@ -1073,10 +1125,14 @@ class MindMapRenderer {
    * the symbol nor the caption is ever crossed.
    */
   edgeAnchor(node, dir, ox, oy) {
-    return {
-      x: (dir > 0 ? node.x + node.w : node.x) + ox,
-      y: this.anchorY(node) + oy,
-    };
+    const y = this.anchorY(node) + oy;
+    if (node.markerBox) {
+      // Beside a marker the box is only the width of the name below it, so
+      // meet the symbol itself rather than the far edge of that name.
+      const p = this.markerPoint(node, ox, oy);
+      return { x: p.x + dir * node.markerBox.w / 2, y };
+    }
+    return { x: (dir > 0 ? node.x + node.w : node.x) + ox, y };
   }
 
   edgePath(parent, child, ox, oy) {
@@ -1102,7 +1158,7 @@ class MindMapRenderer {
 
     const from = this.edgeAnchor(parent, dir, ox, oy);
     // The child is met from the side facing its parent.
-    const to = { x: (dir > 0 ? child.x : child.x + child.w) + ox, y: this.anchorY(child) + oy };
+    const to = this.edgeAnchor(child, -dir, ox, oy);
 
     const x1 = from.x;
     const y1 = from.y;
