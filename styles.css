@@ -198,6 +198,7 @@
   padding: 0 3px;
   border-radius: 3px;
   background: var(--mm-marker-fill);
+  text-align: center;
 }
 
 /* Opaque, so the road runs behind the name rather than through it. */
@@ -261,10 +262,6 @@
   --mm-marker: 26px;
 }
 
-.mindmap-blocks .mm-node.mm-tiered .mm-label {
-  text-align: center;
-}
-
 .mindmap-blocks .mm-marker {
   flex: none;
   box-sizing: border-box;
@@ -283,11 +280,6 @@
   height: var(--mm-marker);
   border: 3px solid var(--mm-branch-color);
   border-radius: 50%;
-}
-
-/* The key sits on its own panel, so its markers fill to match that. */
-.mindmap-blocks .mm-legend {
-  --mm-marker-fill: var(--background-secondary);
 }
 
 .mindmap-blocks .mm-shape-square,
@@ -317,6 +309,8 @@
 .mindmap-blocks .mm-legend {
   --mm-marker: 17px;
   --mm-branch-color: var(--text-muted);
+  /* The key sits on its own panel, so its markers fill to match that. */
+  --mm-marker-fill: var(--background-secondary);
   display: flex;
   flex-wrap: wrap;
   align-items: center;

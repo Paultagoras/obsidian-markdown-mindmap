@@ -47,6 +47,14 @@ const COMPASS = {
 };
 
 /**
+ * One vocabulary for the yes/no options, so `legend: off` and
+ * `edgeLabels: off` mean the same thing wherever they are read. Anything
+ * outside the vocabulary is neither, which leaves the setting on its default.
+ */
+const isTrue = (v) => /^(true|yes|on|1)$/i.test(String(v || '').trim());
+const isFalse = (v) => /^(false|no|off|0)$/i.test(String(v || '').trim());
+
+/**
  * Parse a `tiers:` option into [{ shape, label }].
  *
  *   tiers: bar, circle, diamond
@@ -68,6 +76,12 @@ function parseTiers(spec) {
     });
   }
   return out;
+}
+
+/** Visit a node and everything under it, parents before children. */
+function eachNode(node, fn) {
+  fn(node);
+  node.children.forEach((c) => eachNode(c, fn));
 }
 
 /* ------------------------------------------------------------------ *
@@ -116,7 +130,7 @@ function parseMindmap(source) {
   const compass = String(options.direction || '').toLowerCase() === 'compass';
   // Naming the road between two places, gated like the rest so "::" stays
   // literal in a map that has not asked for it.
-  const edgeLabels = /^(true|yes|on|1)$/i.test(String(options.edgeLabels || ''));
+  const edgeLabels = isTrue(options.edgeLabels);
 
   let nextId = 0;
   const roots = [];
@@ -225,11 +239,11 @@ function parseMindmap(source) {
       id: -1, text: null, tier: 0, bearing: null, edgeLabel: null, depth: 0,
       parent: null, children: roots,
     };
-    const redepth = (n, d) => {
-      n.depth = d;
-      n.children.forEach((c) => redepth(c, d + 1));
-    };
-    roots.forEach((r) => { r.parent = root; redepth(r, 1); });
+    // Parents are visited first, so each depth is one past the one above.
+    roots.forEach((r) => {
+      r.parent = root;
+      eachNode(r, (n) => { n.depth = n.parent.depth + 1; });
+    });
   }
 
   const { links, unresolved } = resolveLinks(linkSpecs, root);
@@ -254,14 +268,11 @@ function resolveLinks(specs, root) {
   if (!specs.length) return { links, unresolved };
 
   const byName = new Map();
-  const walk = (n) => {
-    if (n.text) {
-      const key = n.text.trim().toLowerCase();
-      if (!byName.has(key)) byName.set(key, n);
-    }
-    n.children.forEach(walk);
-  };
-  walk(root);
+  eachNode(root, (n) => {
+    if (!n.text) return;
+    const key = n.text.trim().toLowerCase();
+    if (!byName.has(key)) byName.set(key, n);
+  });
 
   for (const spec of specs) {
     const parts = spec.split('->');
@@ -278,17 +289,36 @@ function resolveLinks(specs, root) {
  * Inline markdown
  * ------------------------------------------------------------------ */
 
-const INLINE_RE = new RegExp([
-  '`([^`]+)`',                          // code
-  '\\*\\*([\\s\\S]+?)\\*\\*',           // bold
-  '__([\\s\\S]+?)__',                   // bold
-  '~~([\\s\\S]+?)~~',                   // strikethrough
-  '==([\\s\\S]+?)==',                   // highlight
-  '\\*([^*\\n]+?)\\*',                  // italic
-  '_([^_\\n]+?)_',                      // italic
-  '\\[\\[([^\\]]+?)\\]\\]',             // wiki link
-  '\\[([^\\]]*?)\\]\\(([^)\\s]+)\\)',   // markdown link
-].map((s) => '(?:' + s + ')').join('|'), 'g');
+/**
+ * The inline subset, as one table: every rule carries both its pattern and
+ * what to build from it, so the capture groups and the code that reads them
+ * cannot drift apart. Order is precedence: code first, so a backtick span is
+ * taken whole, and each two-character mark before the one-character mark it
+ * begins with.
+ */
+const INLINE_RULES = [
+  { re: '`([^`]+)`', tag: 'code', raw: true },                       // `code`
+  { re: '\\*\\*([\\s\\S]+?)\\*\\*', tag: 'strong' },                 // **bold**
+  { re: '__([\\s\\S]+?)__', tag: 'strong' },                         // __bold__
+  { re: '~~([\\s\\S]+?)~~', tag: 'del' },                            // ~~struck~~
+  { re: '==([\\s\\S]+?)==', tag: 'mark' },                           // ==marked==
+  { re: '\\*([^*\\n]+?)\\*', tag: 'em' },                            // *italic*
+  { re: '_([^_\\n]+?)_', tag: 'em' },                                // _italic_
+  { re: '\\[\\[([^\\]]+?)\\]\\]', wiki: true },                      // [[wiki link]]
+  { re: '\\[([^\\]]*?)\\]\\(([^)\\s]+)\\)', link: true, groups: 2 }, // [text](url)
+];
+
+// Each rule's first capture group, counted off the table rather than by
+// hand — hand-counting is what goes wrong when a rule is inserted.
+let inlineGroup = 1;
+for (const rule of INLINE_RULES) {
+  rule.group = inlineGroup;
+  inlineGroup += rule.groups || 1;
+}
+
+const INLINE_RE = new RegExp(
+  INLINE_RULES.map((r) => '(?:' + r.re + ')').join('|'), 'g',
+);
 
 /**
  * Render a small, safe subset of inline markdown into `el`.
@@ -305,28 +335,15 @@ function renderInline(text, el, onWikiLink) {
     }
     last = m.index + m[0].length;
 
-    if (m[1] !== undefined) {
-      const code = document.createElement('code');
-      code.textContent = m[1];
-      el.appendChild(code);
-    } else if (m[2] !== undefined || m[3] !== undefined) {
-      const strong = document.createElement('strong');
-      renderInline(m[2] !== undefined ? m[2] : m[3], strong, onWikiLink);
-      el.appendChild(strong);
-    } else if (m[4] !== undefined) {
-      const del = document.createElement('del');
-      renderInline(m[4], del, onWikiLink);
-      el.appendChild(del);
-    } else if (m[5] !== undefined) {
-      const mark = document.createElement('mark');
-      renderInline(m[5], mark, onWikiLink);
-      el.appendChild(mark);
-    } else if (m[6] !== undefined || m[7] !== undefined) {
-      const em = document.createElement('em');
-      renderInline(m[6] !== undefined ? m[6] : m[7], em, onWikiLink);
-      el.appendChild(em);
-    } else if (m[8] !== undefined) {
-      const parts = m[8].split('|');
+    // Exactly one alternative can have matched, so the rule owning the
+    // group that participated is the rule that fired.
+    const rule = INLINE_RULES.find((r) => m[r.group] !== undefined);
+    if (!rule) continue;
+    const body = m[rule.group];
+
+    if (rule.wiki) {
+      // "[[Target|Alias]]" reads as the alias and opens the target.
+      const parts = body.split('|');
       const target = parts[0].trim();
       const a = document.createElement('a');
       a.className = 'mm-internal-link';
@@ -337,14 +354,21 @@ function renderInline(text, el, onWikiLink) {
         onWikiLink(target, ev);
       });
       el.appendChild(a);
-    } else if (m[9] !== undefined) {
+    } else if (rule.link) {
+      const href = m[rule.group + 1];
       const a = document.createElement('a');
       a.className = 'mm-external-link';
-      a.setAttribute('href', m[10]);
+      a.setAttribute('href', href);
       a.setAttribute('rel', 'noopener');
-      a.textContent = m[9] || m[10];
+      a.textContent = body || href;
       a.addEventListener('click', (ev) => ev.stopPropagation());
       el.appendChild(a);
+    } else {
+      const node = document.createElement(rule.tag);
+      // Code is the one span whose contents are not themselves markdown.
+      if (rule.raw) node.textContent = body;
+      else renderInline(body, node, onWikiLink);
+      el.appendChild(node);
     }
   }
   if (last < text.length) {
@@ -403,40 +427,35 @@ class MindMapRenderer {
       const n = parseFloat(v);
       return Number.isFinite(n) ? n : fallback;
     };
-    const bool = (v, fallback) => (
-      v === undefined ? fallback : /^(true|yes|on|1)$/i.test(String(v))
-    );
+    const bool = (v, fallback) => (v === undefined ? fallback : isTrue(v));
+    // Several options answer to two spellings, the hyphenated one for
+    // anyone who writes the rest of their front matter that way.
+    const alias = (a, b) => (a !== undefined ? a : b);
 
     const dir = String(o.direction || '').toLowerCase();
     const named = dir === 'right' || dir === 'both' || dir === 'compass';
     return {
       direction: named ? dir : s.direction,
       maxHeight: num(o.height, s.maxHeight),
-      fontSize: num(o.fontSize !== undefined ? o.fontSize : o['font-size'], s.fontSize),
+      fontSize: num(alias(o.fontSize, o['font-size']), s.fontSize),
       hGap: num(o.hGap, s.hGap),
       vGap: num(o.vGap, s.vGap),
       maxNodeWidth: num(o.nodeWidth, s.maxNodeWidth),
-      minFontSize: num(o.minFont !== undefined ? o.minFont : o['min-font'], s.minFontSize),
-      colorful: bool(o.color !== undefined ? o.color : o.colorful, s.colorfulBranches),
+      minFontSize: num(alias(o.minFont, o['min-font']), s.minFontSize),
+      colorful: bool(alias(o.color, o.colorful), s.colorfulBranches),
       edgeStyle: /^(dashed|solid)$/i.test(o.edges || '')
         ? o.edges.toLowerCase() : s.edgeStyle,
       // Compass maps space themselves out unless asked not to. `manual`
       // is for someone who wants the gaps exactly as they wrote them.
-      autoSpace: !/^(manual|off|false|no)$/i.test(String(o.spacing || '')),
+      autoSpace: !(isFalse(o.spacing) || /^manual$/i.test(String(o.spacing || '').trim())),
     };
   }
 
   /* ---- construction ---- */
 
   build() {
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-    }
-    if (this.refitFrame) {
-      cancelAnimationFrame(this.refitFrame);
-      this.refitFrame = 0;
-    }
+    // A rebuild replaces everything the last one wired up.
+    this.destroy();
 
     this.el.empty();
     this.el.addClass('mindmap-blocks');
@@ -455,6 +474,7 @@ class MindMapRenderer {
     this.links = parsed.links;
     this.unresolvedLinks = parsed.unresolved;
     this.root = parsed.root;
+    this.nodes = null;
     this.cfg = this.config();
 
     if (parsed.isEmpty) {
@@ -539,7 +559,7 @@ class MindMapRenderer {
    */
   buildLegend() {
     if (!this.tiers.length) return;
-    if (/^(false|no|off|0)$/i.test(String(this.options.legend || ''))) return;
+    if (isFalse(this.options.legend)) return;
 
     const bar = this.el.createDiv({ cls: 'mm-legend' });
     bar.createSpan({ cls: 'mm-legend-title', text: 'Key' });
@@ -566,25 +586,29 @@ class MindMapRenderer {
   }
 
   assignColors() {
-    const paint = (node, color) => {
-      node.color = color;
-      node.children.forEach((c) => paint(c, color));
-    };
     this.root.children.forEach((branch, i) => {
-      paint(branch, this.cfg.colorful
+      const color = this.cfg.colorful
         ? PALETTE[i % PALETTE.length]
-        : 'var(--interactive-accent)');
+        : 'var(--interactive-accent)';
+      eachNode(branch, (n) => { n.color = color; });
     });
     this.root.color = 'var(--interactive-accent)';
   }
 
   /* ---- node DOM ---- */
 
+  /**
+   * Every node, in reading order. The tree is fixed once parsed — layout
+   * moves nodes but never adds or removes one — so this is walked once and
+   * handed out, rather than rebuilt on each of the four callers.
+   */
   allNodes() {
-    const out = [];
-    const walk = (n) => { out.push(n); n.children.forEach(walk); };
-    walk(this.root);
-    return out;
+    if (!this.nodes) {
+      const out = [];
+      eachNode(this.root, (n) => out.push(n));
+      this.nodes = out;
+    }
+    return this.nodes;
   }
 
   createNodeElements() {
@@ -824,22 +848,15 @@ class MindMapRenderer {
     const PASSES = 120;
     const CEILING = this.cfg.hGap * 60;     // never push a road off the map
 
-    const parent = new Map();
-    const index = (n, p) => {
-      parent.set(n, p);
-      n.children.forEach((c) => index(c, n));
-    };
-    index(this.root, null);
-
     // Boxes first: two names on top of each other is worse than a road
     // clipping one, and settling the boxes often moves the roads clear too.
     const next = () => this.worstOverlap(nodes, MARGIN)
-      || this.worstRoadOverlap(nodes, parent, ROAD);
+      || this.worstRoadOverlap(nodes, ROAD);
 
     for (let pass = 0; pass < PASSES; pass++) {
       const clash = next();
       if (!clash) return true;
-      if (!this.pushApart(clash, parent, CEILING)) return false;
+      if (!this.pushApart(clash, CEILING)) return false;
       place();
     }
     return !next();
@@ -852,16 +869,16 @@ class MindMapRenderer {
    * subtrees can stand well clear of each other and still have a road from
    * one run straight over a name in the other.
    */
-  worstRoadOverlap(nodes, parent, margin) {
+  worstRoadOverlap(nodes, margin) {
     let worst = null;
     for (const child of nodes) {
-      const from = parent.get(child);
+      const from = child.parent;
       if (!from) continue;
 
-      const pm = this.markerPoint(from, 0, 0);
-      const cm = this.markerPoint(child, 0, 0);
-      const A = this.boxAnchor(from, cm.x, cm.y, 0, 0);
-      const B = this.boxAnchor(child, pm.x, pm.y, 0, 0);
+      const pm = this.markerPoint(from);
+      const cm = this.markerPoint(child);
+      const A = this.boxAnchor(from, cm.x, cm.y);
+      const B = this.boxAnchor(child, pm.x, pm.y);
       const dx = B.x - A.x;
       const dy = B.y - A.y;
       const len = Math.hypot(dx, dy);
@@ -906,14 +923,18 @@ class MindMapRenderer {
   /** The worst-overlapping pair, with how far each axis is penetrated. */
   worstOverlap(nodes, margin) {
     let worst = null;
+    // Every pair is tested on every pass, so the boxes are worked out once
+    // here rather than twice for each of the n-squared pairs.
+    const rects = nodes.map((n) => this.nodeRect(n));
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
+      const ra = rects[i];
       for (let j = i + 1; j < nodes.length; j++) {
         const b = nodes[j];
-        const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) + margin;
+        const rb = rects[j];
+        const ox = Math.min(ra.r, rb.r) - Math.max(ra.l, rb.l) + margin;
         if (ox <= 0) continue;
-        const oy = Math.min(a.y + a.h / 2, b.y + b.h / 2)
-          - Math.max(a.y - a.h / 2, b.y - b.h / 2) + margin;
+        const oy = Math.min(ra.b, rb.b) - Math.max(ra.t, rb.t) + margin;
         if (oy <= 0) continue;
 
         const amount = Math.min(ox, oy);
@@ -942,10 +963,10 @@ class MindMapRenderer {
    * vertically and still only be separable east, because no bearing at
    * their fork runs north.
    */
-  pushApart(clash, parent, ceiling) {
+  pushApart(clash, ceiling) {
     const chain = (n) => {
       const out = [];
-      for (let x = n; x; x = parent.get(x)) out.push(x);
+      for (let x = n; x; x = x.parent) out.push(x);
       return out.reverse();
     };
     const ca = chain(clash.a);
@@ -1046,11 +1067,7 @@ class MindMapRenderer {
   layoutSide(rootsOfSide, dir) {
     const cfg = this.cfg;
     const nodes = [];
-    const collect = (n) => {
-      nodes.push(n);
-      n.children.forEach(collect);
-    };
-    rootsOfSide.forEach(collect);
+    rootsOfSide.forEach((r) => eachNode(r, (n) => nodes.push(n)));
 
     const widthByDepth = new Map();
     for (const n of nodes) {
@@ -1100,10 +1117,11 @@ class MindMapRenderer {
     let maxY = -Infinity;
 
     for (const n of this.allNodes()) {
-      minX = Math.min(minX, n.x);
-      maxX = Math.max(maxX, n.x + n.w);
-      minY = Math.min(minY, n.y - n.h / 2);
-      maxY = Math.max(maxY, n.y + n.h / 2);
+      const r = this.nodeRect(n);
+      minX = Math.min(minX, r.l);
+      maxX = Math.max(maxX, r.r);
+      minY = Math.min(minY, r.t);
+      maxY = Math.max(maxY, r.b);
     }
 
     return {
@@ -1125,9 +1143,8 @@ class MindMapRenderer {
     this.canvas.style.height = b.height + 'px';
 
     for (const n of this.allNodes()) {
-      n.el.style.transform =
-        'translate(' + (n.x + ox) + 'px,' + (n.y + oy - n.h / 2) + 'px)';
-
+      const r = this.nodeRect(n, ox, oy);
+      n.el.style.transform = 'translate(' + r.l + 'px,' + r.t + 'px)';
     }
 
     this.svg.setAttribute('width', String(b.width));
@@ -1188,16 +1205,44 @@ class MindMapRenderer {
     renderInline(child.edgeLabel, el, (target, ev) => this.openLink(target, ev));
   }
 
+  /**
+   * An edge as an SVG path. Strokes thin out with depth, the way a
+   * hand-drawn map tapers; a cross-link keeps one weight throughout,
+   * because it belongs to no one depth.
+   */
+  svgPath(d, cls, node, depth) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', cls);
+    path.setAttribute('stroke', node.color || 'var(--interactive-accent)');
+    if (depth !== undefined) {
+      path.setAttribute('stroke-width', String(Math.max(1.2, 3.2 - depth * 0.6)));
+    }
+    return path;
+  }
+
   /** The node's marker, in canvas coordinates: where the place actually is. */
-  markerPoint(node, ox, oy) {
+  markerPoint(node, ox = 0, oy = 0) {
     return {
-      x: node.x + node.w / 2 + (ox || 0),
-      y: node.y + (node.markerDy || 0) + (oy || 0),
+      x: node.x + node.w / 2 + ox,
+      y: node.y + (node.markerDy || 0) + oy,
+    };
+  }
+
+  /**
+   * A node's whole box in canvas coordinates. Worth saying in one place: a
+   * node records x as its left edge but y as the line of its marker, not
+   * the top of its box, so the two axes do not read alike.
+   */
+  nodeRect(node, ox = 0, oy = 0) {
+    return {
+      l: node.x + ox, r: node.x + node.w + ox,
+      t: node.y - node.h / 2 + oy, b: node.y + node.h / 2 + oy,
     };
   }
 
   /** A measured part of a node, as a rect in canvas coordinates. */
-  partRect(node, part, ox, oy) {
+  partRect(node, part, ox = 0, oy = 0) {
     if (!part) return null;
     const cx = node.x + node.w / 2 + ox + part.dx;
     const cy = node.y + oy + part.dy;
@@ -1239,7 +1284,7 @@ class MindMapRenderer {
    * height of the marker that width is empty. A road heading south does
    * still clear the name, because there the name really is in the way.
    */
-  boxAnchor(node, tx, ty, ox, oy) {
+  boxAnchor(node, tx, ty, ox = 0, oy = 0) {
     const p = this.markerPoint(node, ox, oy);
     const dx = tx - p.x;
     const dy = ty - p.y;
@@ -1251,10 +1296,7 @@ class MindMapRenderer {
         this.rayExit(this.partRect(node, node.labelBox, ox, oy), p, dx, dy),
       )
       // Untiered: the node is one undivided block, so the box is the shape.
-      : this.rayExit({
-        l: node.x + ox, r: node.x + node.w + ox,
-        t: node.y - node.h / 2 + oy, b: node.y + node.h / 2 + oy,
-      }, p, dx, dy);
+      : this.rayExit(this.nodeRect(node, ox, oy), p, dx, dy);
 
     return { x: p.x + dx * t, y: p.y + dy * t };
   }
@@ -1279,15 +1321,13 @@ class MindMapRenderer {
       const p2 = this.edgeAnchor(b, outB, ox, oy);
       const bow = Math.max(28, Math.min(70, Math.abs(p2.y - p1.y) * 0.8));
 
-      const path = document.createElementNS(SVG_NS, 'path');
-      path.setAttribute('d',
+      return this.svgPath(
         'M' + p1.x + ',' + p1.y
         + ' C' + (p1.x + outA * bow) + ',' + p1.y
         + ' ' + (p2.x + outB * bow) + ',' + p2.y
-        + ' ' + p2.x + ',' + p2.y);
-      path.setAttribute('class', 'mm-edge mm-crosslink');
-      path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
-      return path;
+        + ' ' + p2.x + ',' + p2.y,
+        'mm-edge mm-crosslink', a,
+      );
     }
 
     // Opposite wings: no shared outside to route along, so head across.
@@ -1320,13 +1360,11 @@ class MindMapRenderer {
     const c2x = p1.x + dx * 0.75 + nx;
     const c2y = p1.y + dy * 0.75 + ny;
 
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d',
+    return this.svgPath(
       'M' + p1.x + ',' + p1.y
-      + ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2.x + ',' + p2.y);
-    path.setAttribute('class', 'mm-edge mm-crosslink');
-    path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
-    return path;
+      + ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2.x + ',' + p2.y,
+      'mm-edge mm-crosslink', a,
+    );
   }
 
   /**
@@ -1357,13 +1395,10 @@ class MindMapRenderer {
       const a = this.boxAnchor(parent, cc.x, cc.y, ox, oy);
       const b = this.boxAnchor(child, pc.x, pc.y, ox, oy);
 
-      const line = document.createElementNS(SVG_NS, 'path');
-      line.setAttribute('d', 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y);
-      line.setAttribute('class', 'mm-edge');
-      line.setAttribute('stroke', child.color);
-      line.setAttribute('stroke-width',
-        String(Math.max(1.2, 3.2 - child.depth * 0.6)));
-      return line;
+      return this.svgPath(
+        'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y,
+        'mm-edge', child, child.depth,
+      );
     }
 
     const from = this.edgeAnchor(parent, dir, ox, oy);
@@ -1376,15 +1411,11 @@ class MindMapRenderer {
     const y2 = to.y;
     const mid = (x1 + x2) / 2;
 
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d',
-      'M' + x1 + ',' + y1 +
-      ' C' + mid + ',' + y1 + ' ' + mid + ',' + y2 + ' ' + x2 + ',' + y2);
-    path.setAttribute('class', 'mm-edge');
-    path.setAttribute('stroke', child.color);
-    // Strokes thin out with depth, the way a hand-drawn map tapers.
-    path.setAttribute('stroke-width', String(Math.max(1.2, 3.2 - child.depth * 0.6)));
-    return path;
+    return this.svgPath(
+      'M' + x1 + ',' + y1
+      + ' C' + mid + ',' + y1 + ' ' + mid + ',' + y2 + ' ' + x2 + ',' + y2,
+      'mm-edge', child, child.depth,
+    );
   }
 
   /* ---- viewport ---- */
@@ -1628,6 +1659,69 @@ class MindMapPlugin extends Plugin {
   }
 }
 
+/**
+ * Every setting is the same shape: a name, a note on what it is for, and
+ * one control writing one key. Kept as a table so adding a setting is a
+ * row rather than another nine lines of the same wiring.
+ */
+const SETTINGS_UI = [
+  {
+    key: 'direction',
+    name: 'Layout direction',
+    desc: 'Balanced spreads branches either side of the centre; rightward keeps one column.',
+    dropdown: [['both', 'Balanced (both sides)'], ['right', 'Rightward']],
+  },
+  {
+    key: 'colorfulBranches',
+    name: 'Colourful branches',
+    desc: 'Give each top-level branch its own hue. When off, everything uses the theme accent.',
+    toggle: true,
+  },
+  {
+    key: 'maxHeight',
+    name: 'Maximum height',
+    desc: 'Tallest a mind map may grow before it scales down to fit (px).',
+    slider: [200, 1200, 20],
+  },
+  {
+    key: 'fontSize',
+    name: 'Font size',
+    desc: 'Base text size for map nodes (px).',
+    slider: [10, 24, 1],
+  },
+  {
+    key: 'hGap',
+    name: 'Horizontal spacing',
+    desc: 'Gap between depth columns (px).',
+    slider: [16, 120, 2],
+  },
+  {
+    key: 'vGap',
+    name: 'Vertical spacing',
+    desc: 'Gap between sibling nodes (px).',
+    slider: [2, 48, 1],
+  },
+  {
+    key: 'maxNodeWidth',
+    name: 'Node width limit',
+    desc: 'Width at which node text starts wrapping (px).',
+    slider: [120, 480, 10],
+  },
+  {
+    key: 'edgeStyle',
+    name: 'Edge style',
+    desc: 'Dashed suits a route map; solid suits a mind map.',
+    dropdown: [['solid', 'Solid'], ['dashed', 'Dashed']],
+  },
+  {
+    key: 'minFontSize',
+    name: 'Minimum text size',
+    desc: 'A large map scales down to fit, but never below this. Past it, '
+      + 'the map overflows its box and can be panned instead (px).',
+    slider: [6, 20, 1],
+  },
+];
+
 class MindMapSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -1638,87 +1732,29 @@ class MindMapSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    const commit = () => this.plugin.saveSettings();
+    for (const spec of SETTINGS_UI) {
+      const setting = new Setting(containerEl).setName(spec.name).setDesc(spec.desc);
+      const value = this.plugin.settings[spec.key];
+      const commit = async (v) => {
+        this.plugin.settings[spec.key] = v;
+        await this.plugin.saveSettings();
+      };
 
-    new Setting(containerEl)
-      .setName('Layout direction')
-      .setDesc('Balanced spreads branches either side of the centre; rightward keeps one column.')
-      .addDropdown((d) => d
-        .addOption('both', 'Balanced (both sides)')
-        .addOption('right', 'Rightward')
-        .setValue(this.plugin.settings.direction)
-        .onChange(async (v) => { this.plugin.settings.direction = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Colourful branches')
-      .setDesc('Give each top-level branch its own hue. When off, everything uses the theme accent.')
-      .addToggle((t) => t
-        .setValue(this.plugin.settings.colorfulBranches)
-        .onChange(async (v) => { this.plugin.settings.colorfulBranches = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Maximum height')
-      .setDesc('Tallest a mind map may grow before it scales down to fit (px).')
-      .addSlider((s) => s
-        .setLimits(200, 1200, 20)
-        .setValue(this.plugin.settings.maxHeight)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.maxHeight = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Font size')
-      .setDesc('Base text size for map nodes (px).')
-      .addSlider((s) => s
-        .setLimits(10, 24, 1)
-        .setValue(this.plugin.settings.fontSize)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.fontSize = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Horizontal spacing')
-      .setDesc('Gap between depth columns (px).')
-      .addSlider((s) => s
-        .setLimits(16, 120, 2)
-        .setValue(this.plugin.settings.hGap)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.hGap = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Vertical spacing')
-      .setDesc('Gap between sibling nodes (px).')
-      .addSlider((s) => s
-        .setLimits(2, 48, 1)
-        .setValue(this.plugin.settings.vGap)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.vGap = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Node width limit')
-      .setDesc('Width at which node text starts wrapping (px).')
-      .addSlider((s) => s
-        .setLimits(120, 480, 10)
-        .setValue(this.plugin.settings.maxNodeWidth)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.maxNodeWidth = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Edge style')
-      .setDesc('Dashed suits a route map; solid suits a mind map.')
-      .addDropdown((d) => d
-        .addOption('solid', 'Solid')
-        .addOption('dashed', 'Dashed')
-        .setValue(this.plugin.settings.edgeStyle)
-        .onChange(async (v) => { this.plugin.settings.edgeStyle = v; await commit(); }));
-
-    new Setting(containerEl)
-      .setName('Minimum text size')
-      .setDesc('A large map scales down to fit, but never below this. Past it, '
-        + 'the map overflows its box and can be panned instead (px).')
-      .addSlider((s) => s
-        .setLimits(6, 20, 1)
-        .setValue(this.plugin.settings.minFontSize)
-        .setDynamicTooltip()
-        .onChange(async (v) => { this.plugin.settings.minFontSize = v; await commit(); }));
+      if (spec.dropdown) {
+        setting.addDropdown((d) => {
+          for (const [v, label] of spec.dropdown) d.addOption(v, label);
+          return d.setValue(value).onChange(commit);
+        });
+      } else if (spec.toggle) {
+        setting.addToggle((t) => t.setValue(value).onChange(commit));
+      } else {
+        setting.addSlider((sl) => sl
+          .setLimits(spec.slider[0], spec.slider[1], spec.slider[2])
+          .setValue(value)
+          .setDynamicTooltip()
+          .onChange(commit));
+      }
+    }
   }
 }
 
