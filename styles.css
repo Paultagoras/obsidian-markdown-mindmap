@@ -152,6 +152,26 @@
   border-radius: 4px;
 }
 
+/* ---- cross-links ---- */
+
+/* Drawn dashed and dimmer than the tree edges: a cross-link is a real
+   connection, but the tree is what explains the shape of the map. */
+.mindmap-blocks .mm-crosslink {
+  stroke-width: 1.8;
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
+}
+
+.mindmap-blocks .mm-warning {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: calc(var(--mm-font-size) * 0.82);
+}
+
 /* ---- tier markers ---- */
 
 /* A tiered node drops the depth-based pill/rule and leads with its shape.

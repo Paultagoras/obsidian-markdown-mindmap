@@ -119,3 +119,29 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
 
 Shapes: `bar`, `circle`, `diamond`, `square`, `pill`. Unmarked nodes keep the
 normal depth styling, so you can tag only what matters.
+
+## Cross-links
+
+Nested bullets only describe a tree, so a route that loops back has nowhere
+to go. `link:` draws it anyway — here a road leaves west and returns from
+the north, without either end losing its place in the hierarchy.
+
+```mindmap
+---
+tiers: bar=Waypoint, circle=Town, diamond=City
+link: Westgate Ford -> North Watch
+---
+- Stone River {3}
+  - West Road {1}
+    - Millbrook {2}
+      - Westgate Ford {1}
+  - North Road {1}
+    - North Watch {1}
+      - Highfell {2}
+  - East Road {1}
+    - Eastmarch {2}
+```
+
+Cross-links are dashed and dimmer than tree edges. Placement still comes
+from the tree, so these work best between places that are already near each
+other — which is what a local loop is.

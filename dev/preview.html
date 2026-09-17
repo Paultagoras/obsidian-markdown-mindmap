@@ -195,6 +195,29 @@ tiers: bar, circle
   - Valid {1}
   - Out of range {9}
 `],
+  ['Cross-link: roundabout route (west out, north back)', `
+---
+tiers: bar=Waypoint, circle=Town, diamond=City
+link: Westgate Ford -> North Watch
+---
+- Stone River {3}
+  - West Road {1}
+    - Millbrook {2}
+      - Westgate Ford {1}
+  - North Road {1}
+    - North Watch {1}
+      - Highfell {2}
+  - East Road {1}
+    - Eastmarch {2}
+`],
+  ['REGRESSION: unresolved link is reported, not dropped', `
+---
+link: Nowhere -> Alsonowhere
+link: malformed line
+---
+- Root
+  - Child
+`],
   ['Tiers mixed with untiered nodes', `
 ---
 tiers: circle=Major, diamond=Capital

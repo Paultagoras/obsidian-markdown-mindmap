@@ -80,6 +80,7 @@ function parseTiers(spec) {
 function parseMindmap(source) {
   const lines = source.replace(/\t/g, '    ').split(/\r?\n/);
   const options = {};
+  const linkSpecs = [];
   let i = 0;
 
   while (i < lines.length && lines[i].trim() === '') i++;
@@ -87,7 +88,11 @@ function parseMindmap(source) {
     i++;
     while (i < lines.length && lines[i].trim() !== '---') {
       const m = lines[i].match(/^\s*([A-Za-z][\w-]*)\s*:\s*(.*)$/);
-      if (m) options[m[1]] = m[2].trim();
+      if (m) {
+        // `link:` may repeat; everything else is a single value.
+        if (m[1].toLowerCase() === 'link') linkSpecs.push(m[2].trim());
+        else options[m[1]] = m[2].trim();
+      }
       i++;
     }
     i++; // consume the closing ---
@@ -183,7 +188,46 @@ function parseMindmap(source) {
     roots.forEach((r) => { r.parent = root; redepth(r, 1); });
   }
 
-  return { options, tiers, root, isEmpty: roots.length === 0 };
+  const { links, unresolved } = resolveLinks(linkSpecs, root);
+
+  return { options, tiers, links, unresolved, root, isEmpty: roots.length === 0 };
+}
+
+/**
+ * Resolve `link: A -> B` specs against node names.
+ *
+ * Cross-links are the one thing a bullet list cannot say: nesting gives
+ * every node exactly one parent, so a route that loops back has nowhere to
+ * go. These are drawn on top of the tree rather than changing it — the tree
+ * still decides where everything sits.
+ *
+ * Unresolved names are reported rather than dropped, so a typo does not
+ * quietly turn into a missing road.
+ */
+function resolveLinks(specs, root) {
+  const links = [];
+  const unresolved = [];
+  if (!specs.length) return { links, unresolved };
+
+  const byName = new Map();
+  const walk = (n) => {
+    if (n.text) {
+      const key = n.text.trim().toLowerCase();
+      if (!byName.has(key)) byName.set(key, n);
+    }
+    n.children.forEach(walk);
+  };
+  walk(root);
+
+  for (const spec of specs) {
+    const parts = spec.split('->');
+    if (parts.length !== 2) { unresolved.push(spec); continue; }
+    const a = byName.get(parts[0].trim().toLowerCase());
+    const b = byName.get(parts[1].trim().toLowerCase());
+    if (a && b && a !== b) links.push({ a, b });
+    else unresolved.push(spec);
+  }
+  return { links, unresolved };
 }
 
 /* ------------------------------------------------------------------ *
@@ -357,6 +401,8 @@ class MindMapRenderer {
 
     this.options = parsed.options;
     this.tiers = parsed.tiers;
+    this.links = parsed.links;
+    this.unresolvedLinks = parsed.unresolved;
     this.root = parsed.root;
     this.cfg = this.config();
 
@@ -381,6 +427,15 @@ class MindMapRenderer {
     this.assignColors();
     this.createNodeElements();
     this.buildLegend();
+
+    // A mistyped name would otherwise just be a road that never appears.
+    if (this.unresolvedLinks.length) {
+      this.el.createDiv({
+        cls: 'mm-warning',
+        text: 'Unresolved link' + (this.unresolvedLinks.length > 1 ? 's' : '')
+          + ': ' + this.unresolvedLinks.join('; '),
+      });
+    }
     this.attachInteractions();
     this.relayout();
 
@@ -526,6 +581,48 @@ class MindMapRenderer {
     return node.children.reduce((sum, c) => sum + this.weight(c), 0);
   }
 
+  /** The top-level branch a node belongs to, or null for the root itself. */
+  branchOf(node) {
+    let n = node;
+    while (n && n.parent && n.parent !== this.root) n = n.parent;
+    return n && n.parent === this.root ? n : null;
+  }
+
+  /**
+   * Top-level branches grouped so that cross-linked ones travel together,
+   * heaviest group first so the greedy balance has the best chance of
+   * evening out. Without links this is just one branch per group.
+   */
+  linkGroups() {
+    const branches = this.root.children;
+    const owner = new Map(branches.map((b, i) => [b, i]));
+    const find = (b) => {
+      let i = owner.get(b);
+      while (branches[i] !== undefined && owner.get(branches[i]) !== i) i = owner.get(branches[i]);
+      return i;
+    };
+
+    for (const { a, b } of this.links) {
+      const ba = this.branchOf(a);
+      const bb = this.branchOf(b);
+      if (!ba || !bb || ba === bb) continue;
+      const ra = find(ba);
+      const rb = find(bb);
+      if (ra !== rb) owner.set(branches[rb], ra);
+    }
+
+    const groups = new Map();
+    for (const b of branches) {
+      const key = find(b);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(b);
+    }
+    return [...groups.values()].sort(
+      (x, y) => y.reduce((s, b) => s + this.weight(b), 0)
+              - x.reduce((s, b) => s + this.weight(b), 0),
+    );
+  }
+
   layout() {
     const twoSided = this.cfg.direction === 'both' && this.root.children.length > 1;
 
@@ -537,10 +634,12 @@ class MindMapRenderer {
       right = [];
       let lw = 0;
       let rw = 0;
-      // Greedy balance: each branch joins whichever wing is currently lighter.
-      for (const branch of this.root.children) {
-        const w = this.weight(branch);
-        if (rw <= lw) { right.push(branch); rw += w; } else { left.push(branch); lw += w; }
+      // Greedy balance, but over groups rather than single branches: two
+      // branches joined by a cross-link are placed on the same wing so the
+      // link stays a short hop instead of spanning the whole map.
+      for (const group of this.linkGroups()) {
+        const w = group.reduce((sum, b) => sum + this.weight(b), 0);
+        if (rw <= lw) { right.push(...group); rw += w; } else { left.push(...group); lw += w; }
       }
     }
 
@@ -617,7 +716,8 @@ class MindMapRenderer {
   }
 
   computeBBox() {
-    const pad = 16;
+    // Cross-links bow outward past their endpoints, so leave them room.
+    const pad = this.links.length ? 16 + 60 : 16;
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -668,6 +768,11 @@ class MindMapRenderer {
       }
     };
     draw(this.root);
+
+    // Cross-links go on last so they sit above the tree they bridge.
+    for (const link of this.links) {
+      this.svg.appendChild(this.crossLinkPath(link.a, link.b, ox, oy));
+    }
   }
 
   /**
@@ -677,6 +782,51 @@ class MindMapRenderer {
    */
   anchorY(node) {
     return node.depth >= 2 ? node.y + node.h / 2 - 1 : node.y;
+  }
+
+  /** Where a ray from the node's centre toward (tx, ty) leaves its box. */
+  boxAnchor(node, tx, ty, ox, oy) {
+    const cx = node.x + node.w / 2 + ox;
+    const cy = node.y + oy;
+    const dx = tx - cx;
+    const dy = ty - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+
+    const hw = node.w / 2;
+    const hh = node.h / 2;
+    // Scale the ray until it touches the nearer of the two box edges.
+    const t = Math.min(
+      dx ? hw / Math.abs(dx) : Infinity,
+      dy ? hh / Math.abs(dy) : Infinity,
+    );
+    return { x: cx + dx * t, y: cy + dy * t };
+  }
+
+  /**
+   * A cross-link bows away from the straight line between its endpoints, so
+   * it stays distinguishable from the tree edges it crosses and from a
+   * second link running the other way between the same pair.
+   */
+  crossLinkPath(a, b, ox, oy) {
+    const ac = { x: a.x + a.w / 2 + ox, y: a.y + oy };
+    const bc = { x: b.x + b.w / 2 + ox, y: b.y + oy };
+    const p1 = this.boxAnchor(a, bc.x, bc.y, ox, oy);
+    const p2 = this.boxAnchor(b, ac.x, ac.y, ox, oy);
+
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const bow = Math.min(60, dist * 0.22);
+    // Perpendicular offset on the midpoint gives the curve its arc.
+    const mx = (p1.x + p2.x) / 2 - (dy / dist) * bow;
+    const my = (p1.y + p2.y) / 2 + (dx / dist) * bow;
+
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d',
+      'M' + p1.x + ',' + p1.y + ' Q' + mx + ',' + my + ' ' + p2.x + ',' + p2.y);
+    path.setAttribute('class', 'mm-edge mm-crosslink');
+    path.setAttribute('stroke', a.color || 'var(--interactive-accent)');
+    return path;
   }
 
   edgePath(parent, child, ox, oy) {

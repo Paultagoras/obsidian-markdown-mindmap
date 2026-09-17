@@ -67,6 +67,7 @@ height: 400
 | `nodeWidth` | px | Width at which node text wraps |
 | `tiers` | shape list | Turn on tier markers (see below) |
 | `legend` | `true`, `false` | Show the key under a tiered map |
+| `link` | `A -> B` | Connect two nodes across the tree; may repeat |
 
 ### Tiers
 
@@ -103,6 +104,42 @@ tag only what matters.
 **`{n}` is inert in a map with no `tiers:` line.** A node reading
 `Match two digits \d{2}` keeps its braces, and adding tiers to one map can
 never change how another one parses.
+
+### Cross-links
+
+Nested bullets can only describe a tree — every node gets exactly one
+parent — so a route that loops back has nowhere to go. `link:` draws that
+connection on top of the tree:
+
+~~~markdown
+```mindmap
+---
+link: Westgate Ford -> North Watch
+---
+- Stone River
+  - West Road
+    - Millbrook
+      - Westgate Ford
+  - North Road
+    - North Watch
+```
+~~~
+
+A road leaving west and returning from the north, without either end
+losing its place in the hierarchy. Cross-links are dashed and dimmer than
+tree edges, because the tree is still what explains the shape of the map.
+`link:` may repeat, names match node text case-insensitively, and anything
+that fails to resolve is reported under the map rather than silently
+skipped.
+
+Branches joined by a cross-link are placed on the same side of a balanced
+map, so a local loop stays a short hop instead of spanning the whole width.
+
+**This does not make the layout a graph.** Placement still comes from the
+tree: each node sits where its parent puts it. That suits loops between
+nearby places — the roundabout route above draws as a 60px arc on a
+1000px-wide map — but a link between two distant corners will be a long
+line, because neither end can move to meet the other.
 
 ### Interacting
 
