@@ -68,6 +68,7 @@ height: 400
 | `tiers` | shape list | Turn on tier markers (see below) |
 | `legend` | `true`, `false` | Show the key under a tiered map |
 | `link` | `A -> B` | Connect two nodes across the tree; may repeat |
+| `minFont` | px | Auto-fit will not shrink text below this |
 
 ### Tiers
 
@@ -121,7 +122,8 @@ link: Westgate Ford -> North Watch
     - Millbrook
       - Westgate Ford
   - North Road
-    - North Watch
+    - Highfell
+      - North Watch
 ```
 ~~~
 
@@ -133,13 +135,23 @@ that fails to resolve is reported under the map rather than silently
 skipped.
 
 Branches joined by a cross-link are placed on the same side of a balanced
-map, so a local loop stays a short hop instead of spanning the whole width.
+map, and the arc bows away from the centre rather than back through the
+tree, so a local loop stays a short visible hop instead of disappearing
+under the node boxes it crosses.
 
 **This does not make the layout a graph.** Placement still comes from the
 tree: each node sits where its parent puts it. That suits loops between
 nearby places — the roundabout route above draws as a 60px arc on a
 1000px-wide map — but a link between two distant corners will be a long
 line, because neither end can move to meet the other.
+
+### Readability
+
+A map wider than the note scales down to fit — but only until its text
+reaches the **minimum text size** (11px by default, in settings or per map
+with `minFont`). Past that it stops shrinking, overflows its box, and is
+panned instead. Shrinking without a floor turns a large map into an
+unreadable thumbnail.
 
 ### Interacting
 

@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
   hGap: 46,               // horizontal gap between depth columns
   vGap: 12,               // vertical gap between sibling nodes
   maxNodeWidth: 260,      // px before node text wraps
+  minFontSize: 11,        // px, auto-fit never shrinks text below this
   colorfulBranches: true, // give each top-level branch its own hue
 };
 
@@ -31,8 +32,8 @@ const PALETTE = [
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-// Auto-fit never shrinks a map below this, so text stays readable.
-const MIN_FIT_SCALE = 0.45;
+// Hard floor on the auto-fit scale, whatever the font settings say.
+const MIN_FIT_SCALE = 0.2;
 
 // Marker shapes a map may assign to its tiers.
 const TIER_SHAPES = ['bar', 'circle', 'diamond', 'square', 'pill'];
@@ -371,6 +372,7 @@ class MindMapRenderer {
       hGap: num(o.hGap, s.hGap),
       vGap: num(o.vGap, s.vGap),
       maxNodeWidth: num(o.nodeWidth, s.maxNodeWidth),
+      minFontSize: num(o.minFont !== undefined ? o.minFont : o['min-font'], s.minFontSize),
       colorful: bool(o.color !== undefined ? o.color : o.colorful, s.colorfulBranches),
     };
   }
@@ -816,10 +818,20 @@ class MindMapRenderer {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const bow = Math.min(60, dist * 0.22);
-    // Perpendicular offset on the midpoint gives the curve its arc.
-    const mx = (p1.x + p2.x) / 2 - (dy / dist) * bow;
-    const my = (p1.y + p2.y) / 2 + (dx / dist) * bow;
+    // Short links still need a visible arc, or they read as a stray tick.
+    const bow = Math.max(22, Math.min(70, dist * 0.3));
+
+    // Bow away from the root. The two perpendiculars are equally valid, but
+    // the inward one dives back through the tree, where the node boxes cover
+    // it — which is what makes a loop fail to read as a loop.
+    const midX = (p1.x + p2.x) / 2;
+    const midY = (p1.y + p2.y) / 2;
+    const rootX = this.root.x + this.root.w / 2 + ox;
+    const rootY = this.root.y + oy;
+    const away = ((midX - rootX) * -dy + (midY - rootY) * dx) >= 0 ? 1 : -1;
+
+    const mx = midX - (dy / dist) * bow * away;
+    const my = midY + (dx / dist) * bow * away;
 
     const path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute('d',
@@ -868,9 +880,15 @@ class MindMapRenderer {
     if (b.height * scale > this.cfg.maxHeight) {
       scale = Math.min(scale, this.cfg.maxHeight / b.height);
     }
-    // A big map shrunk to fit becomes an unreadable thumbnail. Stop at a
-    // legible floor and let the overflow be panned instead.
-    this.scale = Math.max(scale, MIN_FIT_SCALE);
+    // A big map shrunk to fit becomes an unreadable thumbnail. The floor is
+    // expressed as a readable text size rather than a bare scale factor, so
+    // it means the same thing whatever the font is set to; past that point
+    // the map overflows and is panned instead of shrinking further.
+    // Guarded: a non-finite value here would turn every node transform into
+    // NaN and blank the map, with nothing thrown to say why.
+    const minFont = Number.isFinite(this.cfg.minFontSize) ? this.cfg.minFontSize : 0;
+    const legible = this.cfg.fontSize > 0 ? Math.min(1, minFont / this.cfg.fontSize) : 0;
+    this.scale = Math.max(scale, legible, MIN_FIT_SCALE);
 
     const boxH = this.syncHeight();
     const contentW = b.width * this.scale;
@@ -1135,6 +1153,16 @@ class MindMapSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.maxNodeWidth)
         .setDynamicTooltip()
         .onChange(async (v) => { this.plugin.settings.maxNodeWidth = v; await commit(); }));
+
+    new Setting(containerEl)
+      .setName('Minimum text size')
+      .setDesc('A large map scales down to fit, but never below this. Past it, '
+        + 'the map overflows its box and can be panned instead (px).')
+      .addSlider((s) => s
+        .setLimits(6, 20, 1)
+        .setValue(this.plugin.settings.minFontSize)
+        .setDynamicTooltip()
+        .onChange(async (v) => { this.plugin.settings.minFontSize = v; await commit(); }));
   }
 }
 

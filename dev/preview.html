@@ -205,8 +205,8 @@ link: Westgate Ford -> North Watch
     - Millbrook {2}
       - Westgate Ford {1}
   - North Road {1}
-    - North Watch {1}
-      - Highfell {2}
+    - Highfell {2}
+      - North Watch {1}
   - East Road {1}
     - Eastmarch {2}
 `],
@@ -233,7 +233,7 @@ tiers: circle=Major, diamond=Capital
 const fakePlugin = {
   settings: {
     direction: 'both', maxHeight: 600, fontSize: 15, hGap: 46, vGap: 12,
-    maxNodeWidth: 260, colorfulBranches: true,
+    maxNodeWidth: 260, minFontSize: 11, colorfulBranches: true,
   },
   app: { workspace: { openLinkText: (t) => console.log('open:', t) } },
 };

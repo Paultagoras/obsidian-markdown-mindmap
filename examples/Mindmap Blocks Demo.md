@@ -136,8 +136,8 @@ link: Westgate Ford -> North Watch
     - Millbrook {2}
       - Westgate Ford {1}
   - North Road {1}
-    - North Watch {1}
-      - Highfell {2}
+    - Highfell {2}
+      - North Watch {1}
   - East Road {1}
     - Eastmarch {2}
 ```
