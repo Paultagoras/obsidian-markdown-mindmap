@@ -70,6 +70,7 @@ height: 400
 | `link` | `A -> B` | Connect two nodes across the tree; may repeat |
 | `minFont` | px | Auto-fit will not shrink text below this |
 | `edges` | `solid`, `dashed` | Route style; dashed suits a map |
+| `edgeLabels` | `true`, `false` | Allow `:: name` to name a connection |
 
 ### Tiers
 
@@ -101,8 +102,11 @@ Names after `=` are optional and label the key; without them the key reads
 
 Edges meet the **marker**, not the label — the marker is the place on the
 route, the label is only its name. A node the route continues through puts
-its marker on the line with its name underneath, so the line runs marker to
-marker unbroken; a leaf, having no outgoing line, keeps its name alongside.
+its marker on the line and its name across the road from it, so the line
+runs marker to marker unbroken. In a compass map "across the road" follows
+the bearing: underneath on an east-west road, and alongside on a
+north-south one, where underneath would sit on the road itself. A leaf,
+having no outgoing line, keeps its name alongside.
 Nodes you leave unmarked keep the normal depth styling, so you can tag only
 what matters.
 
@@ -132,7 +136,8 @@ direction: compass
 ~~~
 
 Bearings are `@N`, `@NE`, `@E`, `@SE`, `@S`, `@SW`, `@W` and `@NW`, written
-last on the line, after any tier marker. A node without one continues in
+after any tier marker. The full order on a line is
+`text {tier} @bearing :: connection name`. A node without one continues in
 the direction its parent went — so a road only needs a bearing where it
 turns, and Glasspoint above needs none to keep heading north.
 
@@ -196,6 +201,31 @@ tree: each node sits where its parent puts it. That suits loops between
 nearby places — the roundabout route above draws as a 60px arc on a
 1000px-wide map — but a link between two distant corners will be a long
 line, because neither end can move to meet the other.
+
+### Naming a connection
+
+Some things belong to the link rather than to either end — the name of a
+road, what a step depends on. `edgeLabels: true` turns on `:: name`, written
+last on the line, naming the connection into that node:
+
+~~~markdown
+```mindmap
+---
+edgeLabels: true
+---
+- Stone River
+  - Tunnelmouth :: Ancient Tunnels
+    - Hearthdeep :: Echo Delve
+```
+~~~
+
+The name sits at the midpoint of the connection, taken from the drawn path,
+so it lands correctly on a curve as readily as on a straight road. Labels
+take no part in layout: nothing moves to make room, so a long name on a
+short link will overhang it.
+
+**`::` is inert without `edgeLabels`**, so a Dataview-style `field:: value`
+keeps its text.
 
 ### Edge style
 

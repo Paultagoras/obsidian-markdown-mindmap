@@ -114,6 +114,9 @@ function parseMindmap(source) {
   // Bearings are live only in a compass map, on the same principle as tiers:
   // elsewhere "@N" is the literal text it looks like.
   const compass = String(options.direction || '').toLowerCase() === 'compass';
+  // Naming the road between two places, gated like the rest so "::" stays
+  // literal in a map that has not asked for it.
+  const edgeLabels = /^(true|yes|on|1)$/i.test(String(options.edgeLabels || ''));
 
   let nextId = 0;
   const roots = [];
@@ -156,6 +159,16 @@ function parseMindmap(source) {
              stack[stack.length - 1].key >= key) stack.pop();
     }
 
+    // Written last on the line, so it comes off first.
+    let edgeLabel = null;
+    if (edgeLabels) {
+      const em = text.match(/\s*::\s*(\S.*?)\s*$/);
+      if (em) {
+        edgeLabel = em[1];
+        text = text.slice(0, em.index);
+      }
+    }
+
     // Bearing comes off first: it is written after the tier marker. An
     // optional number multiplies the gap to the parent, which is how you
     // push one place further out to stop two branches meeting.
@@ -192,6 +205,7 @@ function parseMindmap(source) {
       tier,
       bearing,
       gapScale,
+      edgeLabel,
       depth: stack.length,
       parent,
       children: [],
@@ -208,8 +222,8 @@ function parseMindmap(source) {
     root = roots[0];
   } else {
     root = {
-      id: -1, text: null, tier: 0, bearing: null, depth: 0, parent: null,
-      children: roots,
+      id: -1, text: null, tier: 0, bearing: null, edgeLabel: null, depth: 0,
+      parent: null, children: roots,
     };
     const redepth = (n, d) => {
       n.depth = d;
@@ -458,10 +472,12 @@ class MindMapRenderer {
     this.svg.setAttribute('class', 'mm-edges');
     this.canvas.appendChild(this.svg);
     this.nodeLayer = this.canvas.createDiv({ cls: 'mm-nodes' });
+    this.labelLayer = this.canvas.createDiv({ cls: 'mm-edge-labels' });
     // Sits above the canvas so the fades can actually cover clipped nodes;
     // an inset shadow on the viewport itself would paint under them.
     this.viewport.createDiv({ cls: 'mm-fade' });
 
+    this.resolveBearings();
     this.assignColors();
     this.createNodeElements();
     this.buildLegend();
@@ -519,6 +535,21 @@ class MindMapRenderer {
     }
   }
 
+  /**
+   * Work out the bearing each node was actually placed on, following the
+   * same inheritance the layout uses. Needed before the elements exist,
+   * because it decides where a node's name sits relative to its marker.
+   */
+  resolveBearings() {
+    const walk = (node, inherited) => {
+      for (const child of node.children) {
+        child.dirName = child.bearing || inherited || 'E';
+        walk(child, child.dirName);
+      }
+    };
+    walk(this.root, null);
+  }
+
   assignColors() {
     const paint = (node, color) => {
       node.color = color;
@@ -560,11 +591,14 @@ class MindMapRenderer {
         // rule, so tier reads as a property of the thing, not of its position.
         if (node.tier) {
           el.classList.add('mm-tiered');
-          // A node the route passes through puts its marker on the line and
-          // its label underneath, so the line runs marker to marker without
-          // the text sitting in the middle of it. A leaf has no outgoing
-          // line, so its label can stay alongside.
-          if (node.children.length) el.classList.add('mm-through');
+          // A node the route passes through puts its marker on the line,
+          // with its name clear of it — which means across the road, not at
+          // a fixed side. On an east-west road the name goes underneath; on
+          // a north-south one, underneath would sit on the road, so it goes
+          // alongside instead. A leaf has no outgoing line and stays inline.
+          const u = COMPASS[node.dirName || 'E'] || COMPASS.E;
+          const runsVertically = Math.abs(u.y) > Math.abs(u.x);
+          if (node.children.length && !runsVertically) el.classList.add('mm-through');
           const marker = document.createElement('span');
           marker.className = 'mm-marker mm-shape-' + this.tiers[node.tier - 1].shape;
           el.appendChild(marker);
@@ -878,9 +912,14 @@ class MindMapRenderer {
     this.svg.setAttribute('viewBox', '0 0 ' + b.width + ' ' + b.height);
     while (this.svg.firstChild) this.svg.removeChild(this.svg.firstChild);
 
+    // Edge labels ride on their road, so they are rebuilt with the edges.
+    this.labelLayer.empty();
+
     const draw = (parent) => {
       for (const child of parent.children) {
-        this.svg.appendChild(this.edgePath(parent, child, ox, oy));
+        const path = this.edgePath(parent, child, ox, oy);
+        this.svg.appendChild(path);
+        if (child.edgeLabel) this.placeEdgeLabel(path, child);
         draw(child);
       }
     };
@@ -899,6 +938,28 @@ class MindMapRenderer {
    */
   anchorY(node) {
     return node.depth >= 2 ? node.y + node.h / 2 - 1 : node.y;
+  }
+
+  /**
+   * Name a road at its midpoint, taken from the path itself so it lands on
+   * the curve as readily as on a straight line. The label is opaque, like a
+   * marker, so the road passes behind the words rather than through them.
+   *
+   * Edge labels do not take part in layout — nothing moves to make room for
+   * one — so a long name on a short road will overhang it.
+   */
+  placeEdgeLabel(path, child) {
+    let mid;
+    try {
+      mid = path.getPointAtLength(path.getTotalLength() / 2);
+    } catch (e) {
+      return; // no geometry yet; nothing sensible to place against
+    }
+    const el = this.labelLayer.createDiv({ cls: 'mm-edge-label' });
+    el.style.left = mid.x + 'px';
+    el.style.top = mid.y + 'px';
+    el.style.setProperty('--mm-branch-color', child.color);
+    renderInline(child.edgeLabel, el, (target, ev) => this.openLink(target, ev));
   }
 
   /** Where a ray from the node's centre toward (tx, ty) leaves its box. */

@@ -162,6 +162,7 @@ so you only write a bearing where the route turns.
 ---
 direction: compass
 edges: dashed
+edgeLabels: true
 height: 720
 tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
 ---
@@ -178,7 +179,7 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
     - Smithport {2}
       - Driftwood {1} @S
       - Southbay {2} @E
-  - Redwater {1} @E3
+  - Redwater {1} @E3.5
     - Ash Hollow {1} @S
       - Duston {1}
         - Copperfield {2}
@@ -188,8 +189,8 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
         - Greenbank {1}
           - Lakewood {2}
       - Stone River {3} @E
-        - Tunnelmouth {1} @NE
-          - Hearthdeep {2} @E
+        - Tunnelmouth {1} @NE :: Ancient Tunnels
+          - Hearthdeep {2} @E :: Echo Delve
             - Iron Hollow {2} @NE
             - Cold Hollow {1} @E
         - Millstone {1} @E
@@ -202,7 +203,7 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
 ```
 
 A number after the bearing multiplies the gap to the parent. Redwater runs
-`@E3` because the road south from it — Ash Hollow, Duston, Copperfield —
+`@E3.5` because the road south from it — Ash Hollow, Duston, Copperfield —
 would otherwise grow into Smithport's cluster; pushing Redwater further east
 makes room for that road to run due south, as it should. Clearwater runs
 `@E2` for the same reason.

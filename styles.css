@@ -184,6 +184,29 @@
   stroke-dasharray: 6 4;
 }
 
+/* ---- edge labels ---- */
+
+.mindmap-blocks .mm-edge-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Opaque, so the road runs behind the name rather than through it. */
+.mindmap-blocks .mm-edge-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--mm-marker-fill);
+  color: var(--text-muted);
+  font-size: calc(var(--mm-font-size) * 0.8);
+  font-style: italic;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
 /* ---- cross-links ---- */
 
 /* Drawn dashed and dimmer than the tree edges: a cross-link is a real

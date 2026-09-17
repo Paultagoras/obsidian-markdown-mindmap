@@ -176,6 +176,7 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
 ---
 direction: compass
 edges: dashed
+edgeLabels: true
 height: 720
 tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
 ---
@@ -192,7 +193,7 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
     - Smithport {2}
       - Driftwood {1} @S
       - Southbay {2} @E
-  - Redwater {1} @E3
+  - Redwater {1} @E3.5
     - Ash Hollow {1} @S
       - Duston {1}
         - Copperfield {2}
@@ -202,8 +203,8 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
         - Greenbank {1}
           - Lakewood {2}
       - Stone River {3} @E
-        - Tunnelmouth {1} @NE
-          - Hearthdeep {2} @E
+        - Tunnelmouth {1} @NE :: Ancient Tunnels
+          - Hearthdeep {2} @E :: Echo Delve
             - Iron Hollow {2} @NE
             - Cold Hollow {1} @E
         - Millstone {1} @E
@@ -243,6 +244,20 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
   - Forward to @N
   - Mention @ someone
   - Ping @NE team
+`],
+  ['Edge labels on an ordinary mind map', `
+---
+edgeLabels: true
+---
+- Release
+  - Staging :: deploy
+    - Production :: promote
+  - Rollback :: on failure
+`],
+  ['REGRESSION: :: stays literal without edgeLabels', `
+- Dataview notes
+  - field:: value
+  - key:: another
 `],
   ['REGRESSION: braces stay literal without a tiers: line', `
 - Regex notes
