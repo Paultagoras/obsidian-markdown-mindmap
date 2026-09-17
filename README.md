@@ -312,6 +312,9 @@ state, not source, so it is gitignored and each machine keeps its own.
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full picture, including how
+new notation stays backwards compatible and how releases are cut.
+
 There is no build. Edit `main.js` or `styles.css`, run `./install.sh`, then
 **reload Obsidian** — Ctrl+P → *Reload app without saving*.
 
@@ -344,6 +347,21 @@ Then open <http://127.0.0.1:8731/dev/preview.html>.
 4. **Paint** — nodes are positioned with transforms over a single SVG layer of
    bezier edges. Pan and zoom are one transform on the container, so neither
    re-runs layout.
+
+## Releasing
+
+Tagging a version publishes it. Bump `manifest.json`, record the minimum
+Obsidian version in `versions.json`, then:
+
+```bash
+git tag 1.0.1
+git push origin 1.0.1
+```
+
+[`.github/workflows/release.yml`](.github/workflows/release.yml) refuses the
+release if the tag and `manifest.json` disagree, or if `versions.json` has no
+entry for it, then attests the assets and publishes `main.js`,
+`manifest.json` and `styles.css` as three individual files.
 
 ## Licence
 
