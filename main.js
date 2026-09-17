@@ -758,8 +758,21 @@ class MindMapRenderer {
    */
   layoutCompass() {
     const cfg = this.cfg;
-    this.root.x = -this.root.w / 2;
-    this.root.y = 0;
+
+    // Position by the marker, not by the box. The box also holds the name,
+    // and which side that sits on varies from node to node — so two places
+    // due north of each other would have their boxes aligned and their
+    // markers up to a label's width apart, bending a straight road.
+    const markerOf = (n) => ({
+      x: n.x + (n.anchorDx !== undefined ? n.anchorDx : n.w / 2),
+      y: n.y - n.h / 2 + (n.anchorDy !== undefined ? n.anchorDy : n.h / 2),
+    });
+    const putMarkerAt = (n, x, y) => {
+      n.x = x - (n.anchorDx !== undefined ? n.anchorDx : n.w / 2);
+      n.y = y + n.h / 2 - (n.anchorDy !== undefined ? n.anchorDy : n.h / 2);
+    };
+
+    putMarkerAt(this.root, 0, 0);
     this.root.side = 1;
 
     const place = (node, inherited) => {
@@ -770,8 +783,7 @@ class MindMapRenderer {
         groups.get(name).push(child);
       }
 
-      const pcx = node.x + node.w / 2;
-      const pcy = node.y;
+      const from = markerOf(node);
 
       for (const [name, kids] of groups) {
         const u = COMPASS[name];
@@ -792,8 +804,9 @@ class MindMapRenderer {
             + extent(node, u.x, u.y) / 2
             + extent(child, u.x, u.y) / 2;
 
-          child.x = pcx + u.x * along + px * across - child.w / 2;
-          child.y = pcy + u.y * along + py * across;
+          putMarkerAt(child,
+            from.x + u.x * along + px * across,
+            from.y + u.y * along + py * across);
           child.side = u.x < -0.01 ? -1 : 1;
           place(child, name);
         }

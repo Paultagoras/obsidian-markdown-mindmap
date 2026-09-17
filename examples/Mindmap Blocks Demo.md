@@ -163,7 +163,7 @@ so you only write a bearing where the route turns.
 direction: compass
 edges: dashed
 edgeLabels: true
-height: 720
+height: 760
 tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
 ---
 - Portsmith {2}
