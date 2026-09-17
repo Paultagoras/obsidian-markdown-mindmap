@@ -527,9 +527,15 @@ class MindMapRenderer {
         // rule, so tier reads as a property of the thing, not of its position.
         if (node.tier) {
           el.classList.add('mm-tiered');
+          // A node the route passes through puts its marker on the line and
+          // its label underneath, so the line runs marker to marker without
+          // the text sitting in the middle of it. A leaf has no outgoing
+          // line, so its label can stay alongside.
+          if (node.children.length) el.classList.add('mm-through');
           const marker = document.createElement('span');
           marker.className = 'mm-marker mm-shape-' + this.tiers[node.tier - 1].shape;
           el.appendChild(marker);
+          node.markerEl = marker;
         }
         const label = document.createElement('div');
         label.className = 'mm-label';
@@ -546,6 +552,15 @@ class MindMapRenderer {
       const rect = el.getBoundingClientRect();
       node.w = Math.max(1, Math.ceil(rect.width));
       node.h = Math.max(1, Math.ceil(rect.height));
+
+      // Where the marker sits inside the box, so edges can meet the marker
+      // rather than the corner of the label beside it.
+      if (node.markerEl) {
+        const m = node.markerEl.getBoundingClientRect();
+        node.anchorDx = (m.left - rect.left) + m.width / 2;
+        node.anchorDy = (m.top - rect.top) + m.height / 2;
+      }
+
       this.nodeLayer.appendChild(el);
     }
   }
@@ -877,12 +892,36 @@ class MindMapRenderer {
     return path;
   }
 
+  /**
+   * Where an edge should meet a node. A tiered node is met at its marker —
+   * the marker is the place on the route, and the label is only its name.
+   * Everything else is met at the box edge facing the other end.
+   */
+  edgeAnchor(node, dir, ox, oy) {
+    if (node.anchorDx !== undefined) {
+      return {
+        x: node.x + node.anchorDx + ox,
+        y: node.y - node.h / 2 + node.anchorDy + oy,
+      };
+    }
+    return {
+      x: (dir > 0 ? node.x + node.w : node.x) + ox,
+      y: this.anchorY(node) + oy,
+    };
+  }
+
   edgePath(parent, child, ox, oy) {
     const dir = child.side || 1;
-    const x1 = (dir > 0 ? parent.x + parent.w : parent.x) + ox;
-    const x2 = (dir > 0 ? child.x : child.x + child.w) + ox;
-    const y1 = this.anchorY(parent) + oy;
-    const y2 = this.anchorY(child) + oy;
+    const from = this.edgeAnchor(parent, dir, ox, oy);
+    // The child is met from the side facing its parent.
+    const to = child.anchorDx !== undefined
+      ? this.edgeAnchor(child, dir, ox, oy)
+      : { x: (dir > 0 ? child.x : child.x + child.w) + ox, y: this.anchorY(child) + oy };
+
+    const x1 = from.x;
+    const y1 = from.y;
+    const x2 = to.x;
+    const y2 = to.y;
     const mid = (x1 + x2) / 2;
 
     const path = document.createElementNS(SVG_NS, 'path');

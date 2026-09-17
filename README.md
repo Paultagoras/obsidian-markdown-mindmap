@@ -98,9 +98,12 @@ Names after `=` are optional and label the key; without them the key reads
 "Tier 1", "Tier 2" and so on. A key renders under the map unless you set
 `legend: false`.
 
-Markers sit on the side the branch arrives from, so the line meets the
-shape. Nodes you leave unmarked keep the normal depth styling, so you can
-tag only what matters.
+Edges meet the **marker**, not the label — the marker is the place on the
+route, the label is only its name. A node the route continues through puts
+its marker on the line with its name underneath, so the line runs marker to
+marker unbroken; a leaf, having no outgoing line, keeps its name alongside.
+Nodes you leave unmarked keep the normal depth styling, so you can tag only
+what matters.
 
 **`{n}` is inert in a map with no `tiers:` line.** A node reading
 `Match two digits \d{2}` keeps its braces, and adding tiers to one map can

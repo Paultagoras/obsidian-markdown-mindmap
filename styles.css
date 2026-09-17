@@ -224,6 +224,20 @@
   flex-direction: row-reverse;
 }
 
+/* A node the route continues through: marker on the line, label beneath it.
+   Column order is the same on either wing, so this overrides the flip. */
+.mindmap-blocks .mm-node.mm-tiered.mm-through,
+.mindmap-blocks .mm-node.mm-tiered.mm-through.mm-side-left {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0.3em 0.1em;
+}
+
+.mindmap-blocks .mm-node.mm-tiered.mm-through .mm-label {
+  text-align: center;
+}
+
 .mindmap-blocks .mm-marker {
   flex: none;
   box-sizing: border-box;
