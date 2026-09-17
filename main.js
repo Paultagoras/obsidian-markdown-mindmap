@@ -78,6 +78,12 @@ function parseTiers(spec) {
   return out;
 }
 
+/** Visit a node and everything under it, parents before children. */
+function eachNode(node, fn) {
+  fn(node);
+  node.children.forEach((c) => eachNode(c, fn));
+}
+
 /* ------------------------------------------------------------------ *
  * Parsing
  * ------------------------------------------------------------------ */
@@ -233,11 +239,11 @@ function parseMindmap(source) {
       id: -1, text: null, tier: 0, bearing: null, edgeLabel: null, depth: 0,
       parent: null, children: roots,
     };
-    const redepth = (n, d) => {
-      n.depth = d;
-      n.children.forEach((c) => redepth(c, d + 1));
-    };
-    roots.forEach((r) => { r.parent = root; redepth(r, 1); });
+    // Parents are visited first, so each depth is one past the one above.
+    roots.forEach((r) => {
+      r.parent = root;
+      eachNode(r, (n) => { n.depth = n.parent.depth + 1; });
+    });
   }
 
   const { links, unresolved } = resolveLinks(linkSpecs, root);
@@ -262,14 +268,11 @@ function resolveLinks(specs, root) {
   if (!specs.length) return { links, unresolved };
 
   const byName = new Map();
-  const walk = (n) => {
-    if (n.text) {
-      const key = n.text.trim().toLowerCase();
-      if (!byName.has(key)) byName.set(key, n);
-    }
-    n.children.forEach(walk);
-  };
-  walk(root);
+  eachNode(root, (n) => {
+    if (!n.text) return;
+    const key = n.text.trim().toLowerCase();
+    if (!byName.has(key)) byName.set(key, n);
+  });
 
   for (const spec of specs) {
     const parts = spec.split('->');
@@ -286,17 +289,36 @@ function resolveLinks(specs, root) {
  * Inline markdown
  * ------------------------------------------------------------------ */
 
-const INLINE_RE = new RegExp([
-  '`([^`]+)`',                          // code
-  '\\*\\*([\\s\\S]+?)\\*\\*',           // bold
-  '__([\\s\\S]+?)__',                   // bold
-  '~~([\\s\\S]+?)~~',                   // strikethrough
-  '==([\\s\\S]+?)==',                   // highlight
-  '\\*([^*\\n]+?)\\*',                  // italic
-  '_([^_\\n]+?)_',                      // italic
-  '\\[\\[([^\\]]+?)\\]\\]',             // wiki link
-  '\\[([^\\]]*?)\\]\\(([^)\\s]+)\\)',   // markdown link
-].map((s) => '(?:' + s + ')').join('|'), 'g');
+/**
+ * The inline subset, as one table: every rule carries both its pattern and
+ * what to build from it, so the capture groups and the code that reads them
+ * cannot drift apart. Order is precedence: code first, so a backtick span is
+ * taken whole, and each two-character mark before the one-character mark it
+ * begins with.
+ */
+const INLINE_RULES = [
+  { re: '`([^`]+)`', tag: 'code', raw: true },                       // `code`
+  { re: '\\*\\*([\\s\\S]+?)\\*\\*', tag: 'strong' },                 // **bold**
+  { re: '__([\\s\\S]+?)__', tag: 'strong' },                         // __bold__
+  { re: '~~([\\s\\S]+?)~~', tag: 'del' },                            // ~~struck~~
+  { re: '==([\\s\\S]+?)==', tag: 'mark' },                           // ==marked==
+  { re: '\\*([^*\\n]+?)\\*', tag: 'em' },                            // *italic*
+  { re: '_([^_\\n]+?)_', tag: 'em' },                                // _italic_
+  { re: '\\[\\[([^\\]]+?)\\]\\]', wiki: true },                      // [[wiki link]]
+  { re: '\\[([^\\]]*?)\\]\\(([^)\\s]+)\\)', link: true, groups: 2 }, // [text](url)
+];
+
+// Each rule's first capture group, counted off the table rather than by
+// hand — hand-counting is what goes wrong when a rule is inserted.
+let inlineGroup = 1;
+for (const rule of INLINE_RULES) {
+  rule.group = inlineGroup;
+  inlineGroup += rule.groups || 1;
+}
+
+const INLINE_RE = new RegExp(
+  INLINE_RULES.map((r) => '(?:' + r.re + ')').join('|'), 'g',
+);
 
 /**
  * Render a small, safe subset of inline markdown into `el`.
@@ -313,28 +335,15 @@ function renderInline(text, el, onWikiLink) {
     }
     last = m.index + m[0].length;
 
-    if (m[1] !== undefined) {
-      const code = document.createElement('code');
-      code.textContent = m[1];
-      el.appendChild(code);
-    } else if (m[2] !== undefined || m[3] !== undefined) {
-      const strong = document.createElement('strong');
-      renderInline(m[2] !== undefined ? m[2] : m[3], strong, onWikiLink);
-      el.appendChild(strong);
-    } else if (m[4] !== undefined) {
-      const del = document.createElement('del');
-      renderInline(m[4], del, onWikiLink);
-      el.appendChild(del);
-    } else if (m[5] !== undefined) {
-      const mark = document.createElement('mark');
-      renderInline(m[5], mark, onWikiLink);
-      el.appendChild(mark);
-    } else if (m[6] !== undefined || m[7] !== undefined) {
-      const em = document.createElement('em');
-      renderInline(m[6] !== undefined ? m[6] : m[7], em, onWikiLink);
-      el.appendChild(em);
-    } else if (m[8] !== undefined) {
-      const parts = m[8].split('|');
+    // Exactly one alternative can have matched, so the rule owning the
+    // group that participated is the rule that fired.
+    const rule = INLINE_RULES.find((r) => m[r.group] !== undefined);
+    if (!rule) continue;
+    const body = m[rule.group];
+
+    if (rule.wiki) {
+      // "[[Target|Alias]]" reads as the alias and opens the target.
+      const parts = body.split('|');
       const target = parts[0].trim();
       const a = document.createElement('a');
       a.className = 'mm-internal-link';
@@ -345,14 +354,21 @@ function renderInline(text, el, onWikiLink) {
         onWikiLink(target, ev);
       });
       el.appendChild(a);
-    } else if (m[9] !== undefined) {
+    } else if (rule.link) {
+      const href = m[rule.group + 1];
       const a = document.createElement('a');
       a.className = 'mm-external-link';
-      a.setAttribute('href', m[10]);
+      a.setAttribute('href', href);
       a.setAttribute('rel', 'noopener');
-      a.textContent = m[9] || m[10];
+      a.textContent = body || href;
       a.addEventListener('click', (ev) => ev.stopPropagation());
       el.appendChild(a);
+    } else {
+      const node = document.createElement(rule.tag);
+      // Code is the one span whose contents are not themselves markdown.
+      if (rule.raw) node.textContent = body;
+      else renderInline(body, node, onWikiLink);
+      el.appendChild(node);
     }
   }
   if (last < text.length) {
@@ -570,14 +586,11 @@ class MindMapRenderer {
   }
 
   assignColors() {
-    const paint = (node, color) => {
-      node.color = color;
-      node.children.forEach((c) => paint(c, color));
-    };
     this.root.children.forEach((branch, i) => {
-      paint(branch, this.cfg.colorful
+      const color = this.cfg.colorful
         ? PALETTE[i % PALETTE.length]
-        : 'var(--interactive-accent)');
+        : 'var(--interactive-accent)';
+      eachNode(branch, (n) => { n.color = color; });
     });
     this.root.color = 'var(--interactive-accent)';
   }
@@ -592,8 +605,7 @@ class MindMapRenderer {
   allNodes() {
     if (!this.nodes) {
       const out = [];
-      const walk = (n) => { out.push(n); n.children.forEach(walk); };
-      walk(this.root);
+      eachNode(this.root, (n) => out.push(n));
       this.nodes = out;
     }
     return this.nodes;
@@ -1055,11 +1067,7 @@ class MindMapRenderer {
   layoutSide(rootsOfSide, dir) {
     const cfg = this.cfg;
     const nodes = [];
-    const collect = (n) => {
-      nodes.push(n);
-      n.children.forEach(collect);
-    };
-    rootsOfSide.forEach(collect);
+    rootsOfSide.forEach((r) => eachNode(r, (n) => nodes.push(n)));
 
     const widthByDepth = new Map();
     for (const n of nodes) {
