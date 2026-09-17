@@ -180,13 +180,13 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
       - Driftwood {1} @W
       - Brinehook {1} @S
       - Southbay {2} @E
-  - Redwater {1} @E
-    - Ash Hollow {1} @SE
+  - Redwater {1} @E3
+    - Ash Hollow {1} @S
       - Duston {1}
         - Copperfield {2}
           - Scrapper's Rest {1} @SE
-    - Clearwater {1} @E
-      - Fisher's Bend {1} @SE
+    - Clearwater {1} @E2
+      - Fisher's Bend {1} @S
         - Greenbank {1}
           - Lakewood {2}
       - Stone River {3} @E
@@ -203,9 +203,15 @@ tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlemen
               - Kingsford {3} @S
 ```
 
-Placing by hand means you own the collisions: two subtrees can grow into
-the same space, and the fix is to pick different bearings. Saltwatch and
-Greyhaven both run `@W` from Glasspoint here, which fans them apart
+A number after the bearing multiplies the gap to the parent. Redwater runs
+`@E3` because the road south from it — Ash Hollow, Duston, Copperfield —
+would otherwise grow into Smithport's cluster; pushing Redwater further east
+makes room for that road to run due south, as it should. Clearwater runs
+`@E2` for the same reason.
+
+That is the shape of the work: placing by hand means you own the collisions,
+and the fixes are to change a bearing or to push something further out.
+Saltwatch and Greyhaven both run `@W` from Glasspoint, which fans them apart
 vertically rather than stacking them on one line.
 
 One thing the original drawing still says that this cannot: the routes

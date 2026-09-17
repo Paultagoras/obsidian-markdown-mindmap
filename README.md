@@ -139,6 +139,17 @@ turns, and Glasspoint above needs none to keep heading north.
 Siblings sharing a bearing are fanned apart across it, so two settlements
 both `@W` of a hub sit one above the other rather than on top of each other.
 
+A number after the bearing multiplies the gap to the parent — `@E3` places a
+node three gaps east instead of one. This is usually the cleanest way out of
+a collision: rather than bending a road onto a diagonal it does not take,
+push the place it hangs from further out and let the road run true.
+
+~~~markdown
+- Portsmith
+  - Redwater @E3      <- pushed east, making room below it
+    - Ash Hollow @S   <- so this road can run due south
+~~~
+
 **The trade is that you own the collisions.** Nothing reflows to avoid
 anything: two subtrees can grow into the same space, and the fix is to pick
 different bearings. That is the price of deciding where things go — the

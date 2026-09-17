@@ -155,12 +155,17 @@ function parseMindmap(source) {
              stack[stack.length - 1].key >= key) stack.pop();
     }
 
-    // Bearing comes off first: it is written after the tier marker.
+    // Bearing comes off first: it is written after the tier marker. An
+    // optional number multiplies the gap to the parent, which is how you
+    // push one place further out to stop two branches meeting.
     let bearing = null;
+    let gapScale = 1;
     if (compass) {
-      const dm = text.match(/\s*@([A-Za-z]{1,2})$/);
+      const dm = text.match(/\s*@([A-Za-z]{1,2})\s*\*?\s*(\d+(?:\.\d+)?)?$/);
       if (dm && COMPASS[dm[1].toUpperCase()]) {
         bearing = dm[1].toUpperCase();
+        const mul = dm[2] === undefined ? 1 : parseFloat(dm[2]);
+        if (Number.isFinite(mul) && mul > 0) gapScale = mul;
         text = text.slice(0, dm.index);
       }
     }
@@ -185,6 +190,7 @@ function parseMindmap(source) {
       text,
       tier,
       bearing,
+      gapScale,
       depth: stack.length,
       parent,
       children: [],
@@ -709,7 +715,7 @@ class MindMapRenderer {
           const across = cursor + sizes[i] / 2;
           cursor += sizes[i] + cfg.vGap;
 
-          const along = cfg.hGap
+          const along = cfg.hGap * (child.gapScale || 1)
             + extent(node, u.x, u.y) / 2
             + extent(child, u.x, u.y) / 2;
 
