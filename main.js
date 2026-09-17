@@ -4,8 +4,6 @@ const {
   Plugin,
   PluginSettingTab,
   Setting,
-  Notice,
-  Menu,
   MarkdownRenderChild,
 } = require('obsidian');
 
@@ -645,8 +643,6 @@ class MindMapRenderer {
         node.labelEl = label;
       }
 
-      el.addEventListener('contextmenu', (ev) => this.showContextMenu(ev, node));
-
       node.el = el;
 
       // Measure at natural size in the sandbox, then move into the map.
@@ -685,22 +681,6 @@ class MindMapRenderer {
     this.plugin.app.workspace.openLinkText(
       target, this.sourcePath, ev.ctrlKey || ev.metaKey,
     );
-  }
-
-  showContextMenu(ev, node) {
-    if (!node.text) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-
-    const menu = new Menu();
-    menu.addItem((it) => it
-      .setTitle('Copy text')
-      .setIcon('copy')
-      .onClick(async () => {
-        await navigator.clipboard.writeText(node.text);
-        new Notice('Copied node text');
-      }));
-    menu.showAtMouseEvent(ev);
   }
 
   /* ---- layout ---- */

@@ -276,8 +276,9 @@ controls to find, which keeps it readable on a phone as well as a desktop.
 - **Drag** to pan, **double-click** to refit. Both work with touch.
 - **Ctrl/Cmd + scroll** to zoom on desktop. Plain scrolling is left to the
   note, so the page never traps your wheel.
-- **Right-click** a node to copy its text (a desktop convenience only —
-  nothing is only reachable this way).
+
+Right-click is left to Obsidian. A node's text is already in the note that
+produced it, so the plugin asks for no access to the clipboard.
 
 Plugin-wide defaults live in
 *Settings → Community plugins → Mindmap Blocks*.
