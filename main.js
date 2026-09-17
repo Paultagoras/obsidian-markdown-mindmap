@@ -38,6 +38,13 @@ const MIN_FIT_SCALE = 0.2;
 // Marker shapes a map may assign to its tiers.
 const TIER_SHAPES = ['bar', 'circle', 'diamond', 'square', 'pill'];
 
+// Compass bearings, as unit vectors in screen space (y grows downward).
+const D = Math.SQRT1_2;
+const COMPASS = {
+  N: { x: 0, y: -1 }, NE: { x: D, y: -D }, E: { x: 1, y: 0 }, SE: { x: D, y: D },
+  S: { x: 0, y: 1 }, SW: { x: -D, y: D }, W: { x: -1, y: 0 }, NW: { x: -D, y: -D },
+};
+
 /**
  * Parse a `tiers:` option into [{ shape, label }].
  *
@@ -103,6 +110,9 @@ function parseMindmap(source) {
   // it can never change how an existing map parses. A node reading
   // "Match two digits \d{2}" keeps its braces unless this map opted in.
   const tiers = parseTiers(options.tiers);
+  // Bearings are live only in a compass map, on the same principle as tiers:
+  // elsewhere "@N" is the literal text it looks like.
+  const compass = String(options.direction || '').toLowerCase() === 'compass';
 
   let nextId = 0;
   const roots = [];
@@ -145,6 +155,16 @@ function parseMindmap(source) {
              stack[stack.length - 1].key >= key) stack.pop();
     }
 
+    // Bearing comes off first: it is written after the tier marker.
+    let bearing = null;
+    if (compass) {
+      const dm = text.match(/\s*@([A-Za-z]{1,2})$/);
+      if (dm && COMPASS[dm[1].toUpperCase()]) {
+        bearing = dm[1].toUpperCase();
+        text = text.slice(0, dm.index);
+      }
+    }
+
     // A trailing {n} picks a tier, but only within the declared range —
     // "{9}" against three tiers stays literal rather than silently vanishing.
     let tier = 0;
@@ -164,6 +184,7 @@ function parseMindmap(source) {
       id: nextId++,
       text,
       tier,
+      bearing,
       depth: stack.length,
       parent,
       children: [],
@@ -180,7 +201,8 @@ function parseMindmap(source) {
     root = roots[0];
   } else {
     root = {
-      id: -1, text: null, tier: 0, depth: 0, parent: null, children: roots,
+      id: -1, text: null, tier: 0, bearing: null, depth: 0, parent: null,
+      children: roots,
     };
     const redepth = (n, d) => {
       n.depth = d;
@@ -365,8 +387,9 @@ class MindMapRenderer {
     );
 
     const dir = String(o.direction || '').toLowerCase();
+    const named = dir === 'right' || dir === 'both' || dir === 'compass';
     return {
-      direction: dir === 'right' || dir === 'both' ? dir : s.direction,
+      direction: named ? dir : s.direction,
       maxHeight: num(o.height, s.maxHeight),
       fontSize: num(o.fontSize !== undefined ? o.fontSize : o['font-size'], s.fontSize),
       hGap: num(o.hGap, s.hGap),
@@ -643,7 +666,71 @@ class MindMapRenderer {
     );
   }
 
+  /**
+   * Place every node on a bearing from its parent, so a map reads
+   * geographically instead of as columns by depth.
+   *
+   * A child with no bearing continues in the direction its parent was
+   * placed, which is what a road does — you only write a bearing where the
+   * route turns. Children sharing a bearing are fanned apart across it.
+   * Beyond that, two distant subtrees can still grow into the same space;
+   * that is the author's to resolve by choosing different bearings, which is
+   * the trade for placing things by hand.
+   */
+  layoutCompass() {
+    const cfg = this.cfg;
+    this.root.x = -this.root.w / 2;
+    this.root.y = 0;
+    this.root.side = 1;
+
+    const place = (node, inherited) => {
+      const groups = new Map();
+      for (const child of node.children) {
+        const name = child.bearing || inherited || 'E';
+        if (!groups.has(name)) groups.set(name, []);
+        groups.get(name).push(child);
+      }
+
+      const pcx = node.x + node.w / 2;
+      const pcy = node.y;
+
+      for (const [name, kids] of groups) {
+        const u = COMPASS[name];
+        const px = -u.y;   // across the bearing, for fanning siblings
+        const py = u.x;
+        const extent = (n, vx, vy) => Math.abs(vx) * n.w + Math.abs(vy) * n.h;
+
+        const sizes = kids.map((k) => extent(k, px, py));
+        const span = sizes.reduce((a, b) => a + b, 0) + (kids.length - 1) * cfg.vGap;
+        let cursor = -span / 2;
+
+        for (let i = 0; i < kids.length; i++) {
+          const child = kids[i];
+          const across = cursor + sizes[i] / 2;
+          cursor += sizes[i] + cfg.vGap;
+
+          const along = cfg.hGap
+            + extent(node, u.x, u.y) / 2
+            + extent(child, u.x, u.y) / 2;
+
+          child.x = pcx + u.x * along + px * across - child.w / 2;
+          child.y = pcy + u.y * along + py * across;
+          child.side = u.x < -0.01 ? -1 : 1;
+          place(child, name);
+        }
+      }
+    };
+
+    place(this.root, null);
+  }
+
   layout() {
+    if (this.cfg.direction === 'compass') {
+      this.layoutCompass();
+      this.bbox = this.computeBBox();
+      return;
+    }
+
     const twoSided = this.cfg.direction === 'both' && this.root.children.length > 1;
 
     let left = [];
@@ -919,6 +1006,29 @@ class MindMapRenderer {
 
   edgePath(parent, child, ox, oy) {
     const dir = child.side || 1;
+
+    if (this.cfg.direction === 'compass') {
+      // Roads on a map run straight between places, and the bearing already
+      // decided where those places are, so there is nothing for a curve to
+      // express here.
+      const pc = { x: parent.x + parent.w / 2 + ox, y: parent.y + oy };
+      const cc = { x: child.x + child.w / 2 + ox, y: child.y + oy };
+      const a = parent.anchorDx !== undefined
+        ? this.edgeAnchor(parent, dir, ox, oy)
+        : this.boxAnchor(parent, cc.x, cc.y, ox, oy);
+      const b = child.anchorDx !== undefined
+        ? this.edgeAnchor(child, dir, ox, oy)
+        : this.boxAnchor(child, pc.x, pc.y, ox, oy);
+
+      const line = document.createElementNS(SVG_NS, 'path');
+      line.setAttribute('d', 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y);
+      line.setAttribute('class', 'mm-edge');
+      line.setAttribute('stroke', child.color);
+      line.setAttribute('stroke-width',
+        String(Math.max(1.2, 3.2 - child.depth * 0.6)));
+      return line;
+    }
+
     const from = this.edgeAnchor(parent, dir, ox, oy);
     // The child is met from the side facing its parent.
     const to = child.anchorDx !== undefined

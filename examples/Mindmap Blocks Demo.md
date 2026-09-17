@@ -149,60 +149,66 @@ other — which is what a local loop is.
 ## The full route map
 
 The Settlement Route Map redrawn with the plugin: 37 settlements, three
-tiers, one fenced block. Portsmith is the hub, with the northern road
-through Breakwater to Glasspoint, the southern road through Beachwood to
-Smithport, and the eastern road through Redwater and Clearwater out to
-Stone River.
+tiers, placed by compass so it reads as a map rather than as columns by
+distance. Portsmith is the hub — the northern road runs up through
+Breakwater to Glasspoint and east to Stonewright, the southern road down
+through Beachwood to Smithport, and the eastern road out through Redwater
+and Clearwater to Stone River and the country beyond it.
 
-It is wider than a note, so it opens centred on Portsmith — drag to follow
-a road, and watch for the faded edges showing where there is more.
+`@N`, `@NE`, `@E` and so on set a bearing. Where a road simply carries on,
+no bearing is needed: a node without one continues the way its parent went,
+so you only write a bearing where the route turns.
 
 ```mindmap
 ---
+direction: compass
 tiers: bar=Tier 1 settlement, circle=Tier 2 settlement, diamond=Tier 3 settlement
 ---
 - Portsmith {2}
-  - Breakwater {1}
+  - Breakwater {1} @N
     - Glasspoint {2}
-      - Northreach {2}
-      - Saltwatch {1}
-      - Greyhaven {1}
-      - Crow's Rest {1}
+      - Northreach {2} @N
+      - Saltwatch {1} @W
+      - Greyhaven {1} @W
+      - Crow's Rest {1} @E
         - Stonewright {2}
-          - Slate Camp {1}
-          - Deepwell {1}
-          - Farpoint {2}
-  - Beachwood {1}
+          - Slate Camp {1} @NE
+          - Deepwell {1} @E
+          - Farpoint {2} @SE
+  - Beachwood {1} @S
     - Smithport {2}
-      - Driftwood {1}
-      - Brinehook {1}
-      - Southbay {2}
-  - Redwater {1}
-    - Ash Hollow {1}
-    - Duston {1}
-    - Copperfield {2}
-      - Scrapper's Rest {1}
-    - Clearwater {1}
-      - Fisher's Bend {1}
-      - Greenbank {1}
-      - Lakewood {2}
-      - Stone River {3}
-        - Tunnelmouth {1}
-          - Hearthdeep {2}
-            - Iron Hollow {2}
-            - Cold Hollow {1}
-        - Millstone {1}
+      - Driftwood {1} @W
+      - Brinehook {1} @S
+      - Southbay {2} @E
+  - Redwater {1} @E
+    - Ash Hollow {1} @SE
+      - Duston {1}
+        - Copperfield {2}
+          - Scrapper's Rest {1} @SE
+    - Clearwater {1} @E
+      - Fisher's Bend {1} @SE
+        - Greenbank {1}
+          - Lakewood {2}
+      - Stone River {3} @E
+        - Tunnelmouth {1} @NE
+          - Hearthdeep {2} @E
+            - Iron Hollow {2} @NE
+            - Cold Hollow {1} @E
+        - Millstone {1} @E
           - Ironbank {2}
-            - Highwater {1}
-        - Reed Crossing {1}
+            - Highwater {1} @E
+        - Reed Crossing {1} @SE
           - Old Ferry {1}
             - Blackwater {2}
-              - Kingsford {3}
+              - Kingsford {3} @S
 ```
 
-Two things in the original drawing this cannot say yet. The routes named
-between settlements — *Ancient Tunnels* from Stone River to Tunnelmouth,
-*Echo Delve* on to Hearthdeep — have nowhere to go, because labels attach
-to nodes rather than to the roads between them. And the original places
-settlements geographically, while this lays them out in columns by distance
-from Portsmith, so it reads wider and flatter than the hand-drawn version.
+Placing by hand means you own the collisions: two subtrees can grow into
+the same space, and the fix is to pick different bearings. Saltwatch and
+Greyhaven both run `@W` from Glasspoint here, which fans them apart
+vertically rather than stacking them on one line.
+
+One thing the original drawing still says that this cannot: the routes
+named between settlements — *Ancient Tunnels* from Stone River to
+Tunnelmouth, *Echo Delve* on to Hearthdeep — because labels attach to
+nodes, and those belong to the road.

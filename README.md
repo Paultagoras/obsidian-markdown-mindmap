@@ -59,7 +59,7 @@ height: 400
 
 | Key | Values | Meaning |
 | --- | --- | --- |
-| `direction` | `both`, `right` | Balanced on both sides, or a single rightward column |
+| `direction` | `both`, `right`, `compass` | Balanced, a single rightward column, or placed by bearing |
 | `height` | px | Height cap for this map |
 | `color` | `true`, `false` | Per-branch colours, or the theme accent throughout |
 | `fontSize` | px | Base text size |
@@ -108,6 +108,44 @@ what matters.
 **`{n}` is inert in a map with no `tiers:` line.** A node reading
 `Match two digits \d{2}` keeps its braces, and adding tiers to one map can
 never change how another one parses.
+
+### Compass layout
+
+The default layout arranges nodes in columns by depth, which is right for a
+mind map and wrong for a map. `direction: compass` places each node on a
+bearing from its parent instead:
+
+~~~markdown
+```mindmap
+---
+direction: compass
+---
+- Portsmith
+  - Breakwater @N
+    - Glasspoint
+      - Northreach @N
+      - Saltwatch @W
+      - Crow's Rest @E
+  - Beachwood @S
+  - Redwater @E
+```
+~~~
+
+Bearings are `@N`, `@NE`, `@E`, `@SE`, `@S`, `@SW`, `@W` and `@NW`, written
+last on the line, after any tier marker. A node without one continues in
+the direction its parent went — so a road only needs a bearing where it
+turns, and Glasspoint above needs none to keep heading north.
+
+Siblings sharing a bearing are fanned apart across it, so two settlements
+both `@W` of a hub sit one above the other rather than on top of each other.
+
+**The trade is that you own the collisions.** Nothing reflows to avoid
+anything: two subtrees can grow into the same space, and the fix is to pick
+different bearings. That is the price of deciding where things go — the
+column layout never overlaps precisely because it never lets you choose.
+
+**`@N` is inert in a map without `direction: compass`**, so a node reading
+`Forward to @N` keeps its text.
 
 ### Cross-links
 
