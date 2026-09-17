@@ -550,42 +550,6 @@ class MindMapRenderer {
     walk(this.root, null);
   }
 
-  /**
-   * Which side of its marker a name should sit on: the side no road uses.
-   *
-   * Roads at a node are the one back to its parent plus one out to each
-   * child, so a junction can have several. Scoring every candidate against
-   * all of them is what stops a name sitting on a road that leaves in a
-   * direction the node's own bearing knows nothing about — the road east out
-   * of Glasspoint, say, when Glasspoint was itself reached from the south.
-   *
-   * Ties keep the order below, so a plain stop on an east-west road takes
-   * the side away from its parent, as a label on a map usually does.
-   */
-  labelSide(node) {
-    const roads = [];
-    if (node.parent && node.dirName && COMPASS[node.dirName]) {
-      const u = COMPASS[node.dirName];
-      roads.push({ x: -u.x, y: -u.y });          // back the way we came
-    }
-    for (const child of node.children) {
-      const u = COMPASS[child.dirName];
-      if (u) roads.push(u);
-    }
-    if (!roads.length) return 'right';
-
-    const candidates = [
-      ['right', 1, 0], ['left', -1, 0], ['below', 0, 1], ['above', 0, -1],
-    ];
-    let best = null;
-    for (const [name, x, y] of candidates) {
-      // How nearly a road points this way at all; lower is freer.
-      const worst = Math.max(...roads.map((r) => r.x * x + r.y * y));
-      if (!best || worst < best.worst - 1e-6) best = { name, worst };
-    }
-    return best.name;
-  }
-
   assignColors() {
     const paint = (node, color) => {
       node.color = color;
@@ -614,7 +578,6 @@ class MindMapRenderer {
     sb.style.setProperty('--mm-node-max-width', this.cfg.maxNodeWidth + 'px');
 
     const rootIsHub = this.root.text === null;
-    const compassMap = this.cfg.direction === 'compass';
 
     for (const node of this.allNodes()) {
       const el = document.createElement('div');
@@ -628,12 +591,8 @@ class MindMapRenderer {
         // rule, so tier reads as a property of the thing, not of its position.
         if (node.tier) {
           el.classList.add('mm-tiered');
-          // In a compass map every road's direction is known, so the name
-          // goes wherever no road does. Elsewhere the flow is horizontal and
-          // a node the route passes through simply puts its name underneath,
-          // clear of the line; a leaf has no outgoing line and stays inline.
-          if (compassMap) el.classList.add('mm-label-' + this.labelSide(node));
-          else if (node.children.length) el.classList.add('mm-through');
+          // The name always sits under the marker, so a node is simply a
+          // box with a symbol over a caption, and roads meet that box.
           const marker = document.createElement('span');
           marker.className = 'mm-marker mm-shape-' + this.tiers[node.tier - 1].shape;
           el.appendChild(marker);
@@ -654,14 +613,6 @@ class MindMapRenderer {
       const rect = el.getBoundingClientRect();
       node.w = Math.max(1, Math.ceil(rect.width));
       node.h = Math.max(1, Math.ceil(rect.height));
-
-      // Where the marker sits inside the box, so edges can meet the marker
-      // rather than the corner of the label beside it.
-      if (node.markerEl) {
-        const m = node.markerEl.getBoundingClientRect();
-        node.anchorDx = (m.left - rect.left) + m.width / 2;
-        node.anchorDy = (m.top - rect.top) + m.height / 2;
-      }
 
       this.nodeLayer.appendChild(el);
     }
@@ -759,20 +710,10 @@ class MindMapRenderer {
   layoutCompass() {
     const cfg = this.cfg;
 
-    // Position by the marker, not by the box. The box also holds the name,
-    // and which side that sits on varies from node to node — so two places
-    // due north of each other would have their boxes aligned and their
-    // markers up to a label's width apart, bending a straight road.
-    const markerOf = (n) => ({
-      x: n.x + (n.anchorDx !== undefined ? n.anchorDx : n.w / 2),
-      y: n.y - n.h / 2 + (n.anchorDy !== undefined ? n.anchorDy : n.h / 2),
-    });
-    const putMarkerAt = (n, x, y) => {
-      n.x = x - (n.anchorDx !== undefined ? n.anchorDx : n.w / 2);
-      n.y = y + n.h / 2 - (n.anchorDy !== undefined ? n.anchorDy : n.h / 2);
-    };
-
-    putMarkerAt(this.root, 0, 0);
+    // Boxes are what get placed, and what roads run between, so a bearing
+    // offsets one box centre from another.
+    this.root.x = -this.root.w / 2;
+    this.root.y = 0;
     this.root.side = 1;
 
     const place = (node, inherited) => {
@@ -783,7 +724,7 @@ class MindMapRenderer {
         groups.get(name).push(child);
       }
 
-      const from = markerOf(node);
+      const from = { x: node.x + node.w / 2, y: node.y };
 
       for (const [name, kids] of groups) {
         const u = COMPASS[name];
@@ -804,9 +745,8 @@ class MindMapRenderer {
             + extent(node, u.x, u.y) / 2
             + extent(child, u.x, u.y) / 2;
 
-          putMarkerAt(child,
-            from.x + u.x * along + px * across,
-            from.y + u.y * along + py * across);
+          child.x = from.x + u.x * along + px * across - child.w / 2;
+          child.y = from.y + u.y * along + py * across;
           child.side = u.x < -0.01 ? -1 : 1;
           place(child, name);
         }
@@ -940,7 +880,6 @@ class MindMapRenderer {
   /* ---- painting ---- */
 
   paint() {
-    const compassMap = this.cfg.direction === 'compass';
     const b = this.bbox;
     const ox = -b.minX;
     const oy = -b.minY;
@@ -951,10 +890,7 @@ class MindMapRenderer {
     for (const n of this.allNodes()) {
       n.el.style.transform =
         'translate(' + (n.x + ox) + 'px,' + (n.y + oy - n.h / 2) + 'px)';
-      // Put the tier marker on the edge the branch arrives at, so the line
-      // meets the shape rather than the far end of the label. A compass node
-      // already chose its own side before it was measured.
-      n.el.classList.toggle('mm-side-left', n.side === -1 && !compassMap);
+
     }
 
     this.svg.setAttribute('width', String(b.width));
@@ -1101,25 +1037,11 @@ class MindMapRenderer {
   }
 
   /**
-   * Where an edge should meet a node. A tiered node is met at its marker —
-   * the marker is the place on the route, and the label is only its name.
-   * Everything else is met at the box edge facing the other end.
+   * Where an edge meets a node: the boundary of the box holding its marker
+   * and name. Roads stop at the box rather than running into it, so neither
+   * the symbol nor the caption is ever crossed.
    */
   edgeAnchor(node, dir, ox, oy) {
-    if (node.anchorDx !== undefined) {
-      // Measurement happens before the wing is known, so the marker is
-      // always measured in row order. A left-wing node is later flipped with
-      // row-reverse, which mirrors the marker to the other end of the box —
-      // so mirror the offset too, or the edge lands past the far side of the
-      // label. A centred marker mirrors onto itself, so this is safe for the
-      // stacked through-nodes as well.
-      const mirrored = node.side === -1 && this.cfg.direction !== 'compass';
-      const dx = mirrored ? node.w - node.anchorDx : node.anchorDx;
-      return {
-        x: node.x + dx + ox,
-        y: node.y - node.h / 2 + node.anchorDy + oy,
-      };
-    }
     return {
       x: (dir > 0 ? node.x + node.w : node.x) + ox,
       y: this.anchorY(node) + oy,
@@ -1135,12 +1057,8 @@ class MindMapRenderer {
       // express here.
       const pc = { x: parent.x + parent.w / 2 + ox, y: parent.y + oy };
       const cc = { x: child.x + child.w / 2 + ox, y: child.y + oy };
-      const a = parent.anchorDx !== undefined
-        ? this.edgeAnchor(parent, dir, ox, oy)
-        : this.boxAnchor(parent, cc.x, cc.y, ox, oy);
-      const b = child.anchorDx !== undefined
-        ? this.edgeAnchor(child, dir, ox, oy)
-        : this.boxAnchor(child, pc.x, pc.y, ox, oy);
+      const a = this.boxAnchor(parent, cc.x, cc.y, ox, oy);
+      const b = this.boxAnchor(child, pc.x, pc.y, ox, oy);
 
       const line = document.createElementNS(SVG_NS, 'path');
       line.setAttribute('d', 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y);
@@ -1153,9 +1071,7 @@ class MindMapRenderer {
 
     const from = this.edgeAnchor(parent, dir, ox, oy);
     // The child is met from the side facing its parent.
-    const to = child.anchorDx !== undefined
-      ? this.edgeAnchor(child, dir, ox, oy)
-      : { x: (dir > 0 ? child.x : child.x + child.w) + ox, y: this.anchorY(child) + oy };
+    const to = { x: (dir > 0 ? child.x : child.x + child.w) + ox, y: this.anchorY(child) + oy };
 
     const x1 = from.x;
     const y1 = from.y;

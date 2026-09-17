@@ -101,14 +101,10 @@ Names after `=` are optional and label the key; without them the key reads
 `legend: false`.
 
 Edges meet the **marker**, not the label — the marker is the place on the
-route, the label is only its name. In a compass map a name goes on whichever side no road uses, scored against
-every road at that node — the one back to its parent and one out to each
-child. Scoring against all of them is what keeps a name off the road east
-out of Glasspoint, which the node's own bearing knows nothing about. A
-junction with roads in all four quarters has no free side; there the name
-takes the best one and covers the road behind it, as a label on a drawn map
-does. Elsewhere the flow is horizontal: a node the route passes through puts
-its name underneath, and a leaf keeps its name alongside.
+route, the label is only its name. A tiered node is a symbol over a caption: the name always sits under the
+marker. Roads run between the boxes those two make, meeting each box at its
+edge — so a road stops short of a node rather than running into it, and
+neither the symbol nor the name is ever crossed.
 Nodes you leave unmarked keep the normal depth styling, so you can tag only
 what matters.
 
