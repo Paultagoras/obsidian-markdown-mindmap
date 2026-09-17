@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
   hGap: 46,               // horizontal gap between depth columns
   vGap: 12,               // vertical gap between sibling nodes
   maxNodeWidth: 260,      // px before node text wraps
-  minFontSize: 11,        // px, auto-fit never shrinks text below this
+  minFontSize: 15,        // px, auto-fit never shrinks text below this
   colorfulBranches: true, // give each top-level branch its own hue
 };
 
@@ -899,8 +899,15 @@ class MindMapRenderer {
    */
   edgeAnchor(node, dir, ox, oy) {
     if (node.anchorDx !== undefined) {
+      // Measurement happens before the wing is known, so the marker is
+      // always measured in row order. A left-wing node is later flipped with
+      // row-reverse, which mirrors the marker to the other end of the box —
+      // so mirror the offset too, or the edge lands past the far side of the
+      // label. A centred marker mirrors onto itself, so this is safe for the
+      // stacked through-nodes as well.
+      const dx = node.side === -1 ? node.w - node.anchorDx : node.anchorDx;
       return {
-        x: node.x + node.anchorDx + ox,
+        x: node.x + dx + ox,
         y: node.y - node.h / 2 + node.anchorDy + oy,
       };
     }

@@ -151,8 +151,10 @@ line, because neither end can move to meet the other.
 ### Readability
 
 A map wider than the note scales down to fit — but only until its text
-reaches the **minimum text size** (11px by default, in settings or per map
-with `minFont`). Past that it stops shrinking, overflows its box, and is
+reaches the **minimum text size** (15px by default, in settings or per map
+with `minFont`). At the default this equals the base font size, so maps
+never shrink at all: a wide one overflows and is panned. Lower `minFont` if
+you would rather trade some legibility for seeing the whole map at once. Past that it stops shrinking, overflows its box, and is
 panned instead. Shrinking without a floor turns a large map into an
 unreadable thumbnail.
 
